@@ -67,8 +67,9 @@ class FlipCondition implements Condition {
 
 let branchId = 0;
 class Branch {
+	isBranch: true = true;
 	readonly condition: Condition;
-	#lines: (string | Branch)[] = [];
+	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
 
@@ -76,7 +77,7 @@ class Branch {
 		this.condition = condition;
 	}
 
-	addLine(line: string): boolean {
+	addLine(line: FinalLine): boolean {
 		const preprocessorSymbols = /#([^\s]*)\s*(.*)/g
 		// If we are in a subbranch, pass the line to the subbranch
 		if (this.#currentSubBranch) {
@@ -85,7 +86,7 @@ class Branch {
 			}
 		}
 
-		const matchedSymbol = preprocessorSymbols.exec(line);
+		const matchedSymbol = preprocessorSymbols.exec(line.line);
 		if (matchedSymbol) {
 			switch (matchedSymbol[1]) {
 				case 'ifdef':
@@ -123,15 +124,15 @@ class Branch {
 		}
 	}
 
-	out(out: string[] = [], defines: Map<string, string>): void {
+	out(out: FinalLine[] = [], defines: Map<string, string>): void {
 		if (!this.condition.isTrue(defines)) {
 			return;
 		}
 		for (const line of this.#lines) {
-			if (typeof line == 'string') {
-				out.push(line);
+			if ((line as Branch).isBranch) {
+				(line as Branch).out(out, defines);
 			} else {
-				line.out(out, defines);
+				out.push(line as FinalLine);
 			}
 		}
 	}
@@ -141,32 +142,54 @@ export function addWgslInclude(name: string, source: string): void {
 	includes.set(name, source);
 }
 
-export function preprocessWgsl(source: string, defines: Map<string, string> = new Map<string, string>()): string {
-	const outArray = expandIncludes(source);
-
-	const result = preprocess(outArray, defines);
-
-	return result.join('\n');
+export type FinalLine = {
+	sourceName?: string;
+	line: string;
+	originalLine: number;
+	includeLine?: FinalLine;
 }
 
-function preprocess(lines: string[], defines: Map<string, string>): string[] {
-	let depth = 0;
+export function preprocessWgsl(source: string, defines: Map<string, string> = new Map<string, string>()): string {
+	const expandedArray = expandIncludes(source);
+
+	const processedArray = preprocess(expandedArray, defines);
+
+	const finalArray: string[] = [];
+	for (const line of processedArray) {
+		finalArray.push(line.line);
+	}
+	return finalArray.join('\n');
+}
+
+export function preprocessWgslLineMap(source: string, defines: Map<string, string> = new Map<string, string>()): [string, FinalLine[]] {
+	const expandedArray = expandIncludes(source);
+
+	const processedArray = preprocess(expandedArray, defines);
+
+	const finalArray: string[] = [];
+	for (const line of processedArray) {
+		finalArray.push(line.line);
+	}
+	return [finalArray.join('\n'), processedArray];
+}
+
+function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
 	const branch = new Branch(new TrueCondition());
 	for (let i = 0, l = lines.length; i < l; ++i) {
 		branch.addLine(lines[i]!);
 	}
 
-	const result: string[] = [];
+	const result: FinalLine[] = [];
 	branch.out(result, defines);
 	return result;
 }
 
-function expandIncludes(source: string): string[] {
+function expandIncludes(source: string): FinalLine[] {
 	const lines = source.split('\n');
 
 	const allIncludes = new Set<string>();
 	let compileRow = 1;
-	const outArray: string[] = [];
+	const outArray: FinalLine[] = [];
 	const sourceRowToInclude = new Map<number, [string, number]>();
 	const sizeOfSourceRow = [];
 
@@ -179,7 +202,11 @@ function expandIncludes(source: string): string[] {
 			const include = getInclude(includeName, sourceRowToInclude, compileRow, new Set(), allIncludes);
 			if (include) {
 				sourceRowToInclude.set(compileRow, [includeName, include.length]);
-				outArray.push(...include);
+				for (let j = 0; j < include.length; j++) {
+					const includeLine = include[j]!;
+					outArray.push({ line: includeLine.line, originalLine: i + 1, includeLine });
+
+				}
 				compileRow += include.length;
 				actualSize = include.length;
 			} else {
@@ -188,7 +215,7 @@ function expandIncludes(source: string): string[] {
 				}
 			}
 		} else {
-			outArray.push(line);
+			outArray.push({ line, originalLine: i + 1, });
 			++compileRow;
 		}
 		sizeOfSourceRow[i] = actualSize;
@@ -196,8 +223,7 @@ function expandIncludes(source: string): string[] {
 	return outArray;
 }
 
-function getInclude(includeName: string, sourceRowToInclude: Map<number, [string, number]>, compileRow = 0, recursion = new Set<string>(), allIncludes = new Set<string>()): string[] | null {
-	//this.#includes.add(includeName);
+function getInclude(includeName: string, sourceRowToInclude: Map<number, [string, number]>, compileRow = 0, recursion = new Set<string>(), allIncludes = new Set<string>()): FinalLine[] | null {
 	if (recursion.has(includeName)) {
 		console.error('Include recursion in ' + includeName);
 		return null;
@@ -209,16 +235,21 @@ function getInclude(includeName: string, sourceRowToInclude: Map<number, [string
 	}
 
 	const includeLineArray = include.trim().split('\n');
-	includeLineArray.unshift('');//Add an empty line to ensure nested include won't occupy the same line #
-	const outArray: string[] = [];
+	//includeLineArray.unshift('');//Add an empty line to ensure nested include won't occupy the same line #
+	const outArray: FinalLine[] = [];
 	for (let i = 0, l = includeLineArray.length; i < l; ++i) {
 		const line = includeLineArray[i]!;
 		if (line.trim().startsWith('#include')) {
-			const includeName = line.replace('#include', '').trim();
-			const include = getInclude(includeName, sourceRowToInclude, compileRow + i, recursion, allIncludes);
+			const nestedIncludeName = line.replace('#include', '').trim();
+			const include = getInclude(nestedIncludeName, sourceRowToInclude, compileRow + i, recursion, allIncludes);
 			if (include) {
-				sourceRowToInclude.set(compileRow, [includeName, include.length]);
-				outArray.push(...include);
+				sourceRowToInclude.set(compileRow, [nestedIncludeName, include.length]);
+
+
+				for (let j = 0; j < include.length; j++) {
+					const includeLine = include[j]!;
+					outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i + 1, includeLine });
+				}
 				compileRow += include.length;
 			}
 			continue;
@@ -232,7 +263,7 @@ function getInclude(includeName: string, sourceRowToInclude: Map<number, [string
 				continue;
 			}
 		}
-		outArray.push(line);
+		outArray.push({ sourceName: includeName, line, originalLine: i + 1, });
 		++compileRow;
 	}
 	allIncludes.add(includeName);

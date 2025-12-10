@@ -1,7 +1,5 @@
 const includes = new Map<string, string>();
 
-
-//const preprocessorSymbols = /#([^\s]*)(\s*)/gm
 const PRAGMA_REGEX = /#pragma (\w+)/;
 
 interface Condition {
@@ -55,7 +53,7 @@ class TrueCondition implements Condition {
 	}
 }
 
-class ConditionIsFalse implements Condition {
+class FlipCondition implements Condition {
 	#condition: Condition;
 
 	constructor(condition: Condition) {
@@ -69,13 +67,13 @@ class ConditionIsFalse implements Condition {
 
 let branchId = 0;
 class Branch {
-	#condition: Condition;
+	readonly condition: Condition;
 	#lines: (string | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
 
 	constructor(condition: Condition) {
-		this.#condition = condition;
+		this.condition = condition;
 	}
 
 	addLine(line: string): boolean {
@@ -93,6 +91,14 @@ class Branch {
 				case 'ifdef':
 					this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
 					this.#lines.push(this.#currentSubBranch);
+					return true;
+				case 'else':
+					if (this.#currentSubBranch) {
+						this.#currentSubBranch = new Branch(new FlipCondition(this.#currentSubBranch.condition));
+						this.#lines.push(this.#currentSubBranch);
+					} else {
+						return false;
+					}
 					return true;
 				case 'endif':
 					if (this.#currentSubBranch) {
@@ -118,7 +124,7 @@ class Branch {
 	}
 
 	out(out: string[] = [], defines: Map<string, string>): void {
-		if (!this.#condition.isTrue(defines)) {
+		if (!this.condition.isTrue(defines)) {
 			return;
 		}
 		for (const line of this.#lines) {
@@ -147,14 +153,7 @@ function preprocess(lines: string[], defines: Map<string, string>): string[] {
 	let depth = 0;
 	const branch = new Branch(new TrueCondition());
 	for (let i = 0, l = lines.length; i < l; ++i) {
-		//const line = lines[i]!;
 		branch.addLine(lines[i]!);
-		/*
-		const matchedSymbols = line.matchAll(preprocessorSymbols);
-		for (const matchedSymbol of matchedSymbols) {
-			console.info(line, matchedSymbol);
-		}
-		*/
 	}
 
 	const result: string[] = [];
@@ -210,7 +209,7 @@ function getInclude(includeName: string, sourceRowToInclude: Map<number, [string
 	}
 
 	const includeLineArray = include.trim().split('\n');
-	includeLineArray.unshift('');//Add an empty line to insure nested include won't occupy the same line #
+	includeLineArray.unshift('');//Add an empty line to ensure nested include won't occupy the same line #
 	const outArray: string[] = [];
 	for (let i = 0, l = includeLineArray.length; i < l; ++i) {
 		const line = includeLineArray[i]!;

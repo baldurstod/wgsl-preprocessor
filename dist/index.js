@@ -1,15 +1,13 @@
 const includes = new Map();
 //const preprocessorSymbols = /#([^\s]*)(\s*)/gm
 const PRAGMA_REGEX = /#pragma (\w+)/;
-class SimpleCondition {
+class IsDefinedCondition {
     #condition;
-    //#conditionIsTrue: boolean;
-    constructor(condition /*, conditionIsTrue: boolean*/) {
+    constructor(condition) {
         this.#condition = condition;
-        //this.#conditionIsTrue = conditionIsTrue;
     }
-    isTrue() {
-        return true;
+    isTrue(defines) {
+        return defines.has(this.#condition);
     }
 }
 class TrueCondition {
@@ -32,7 +30,7 @@ class Branch {
         //this.#conditionIsTrue = conditionIsTrue;
     }
     addLine(line) {
-        const preprocessorSymbols = /#([^\s]*)(\s*)/gm;
+        const preprocessorSymbols = /#([^\s]*)\s*(.*)/g;
         // If we are in a subbranch, pass the line to the subbranch
         if (this.#currentSubBranch) {
             if (this.#currentSubBranch.addLine(line)) {
@@ -43,7 +41,7 @@ class Branch {
         if (matchedSymbol) {
             switch (matchedSymbol[1]) {
                 case 'ifdef':
-                    this.#currentSubBranch = new Branch(new SimpleCondition(matchedSymbol[2]));
+                    this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]));
                     this.#lines.push(this.#currentSubBranch);
                     return true;
                 case 'endif':
@@ -70,16 +68,18 @@ class Branch {
             }
         }
     }
-    out(out = []) {
+    out(out = [], defines) {
+        if (!this.#condition.isTrue(defines)) {
+            return;
+        }
         for (const line of this.#lines) {
             if (typeof line == 'string') {
                 out.push(line);
             }
             else {
-                line.out(out);
+                line.out(out, defines);
             }
         }
-        return out;
     }
 }
 function addWgslInclude(name, source) {
@@ -87,7 +87,7 @@ function addWgslInclude(name, source) {
 }
 function preprocessWgsl(source, defines = new Map()) {
     const outArray = expandIncludes(source);
-    const result = preprocess(outArray);
+    const result = preprocess(outArray, defines);
     return result.join('\n');
 }
 function preprocess(lines, defines) {
@@ -102,7 +102,9 @@ function preprocess(lines, defines) {
         }
         */
     }
-    return branch.out();
+    const result = [];
+    branch.out(result, defines);
+    return result;
 }
 function expandIncludes(source) {
     const lines = source.split('\n');

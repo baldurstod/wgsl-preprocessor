@@ -5,20 +5,30 @@ const includes = new Map<string, string>();
 const PRAGMA_REGEX = /#pragma (\w+)/;
 
 interface Condition {
-	isTrue: () => boolean;
+	isTrue: (defines: Map<string, string>) => boolean;
 }
 
 class SimpleCondition implements Condition {
-	#condition: string | null;
-	//#conditionIsTrue: boolean;
+	#condition: string;
 
-	constructor(condition: string/*, conditionIsTrue: boolean*/) {
+	constructor(condition: string) {
 		this.#condition = condition;
-		//this.#conditionIsTrue = conditionIsTrue;
 	}
 
 	isTrue(): boolean {
 		return true;
+	}
+}
+
+class IsDefinedCondition implements Condition {
+	#condition: string;
+
+	constructor(condition: string) {
+		this.#condition = condition;
+	}
+
+	isTrue(defines: Map<string, string>): boolean {
+		return defines.has(this.#condition);
 	}
 }
 
@@ -31,11 +41,11 @@ class AndCondition implements Condition {
 		this.#condition2 = condition2;
 	}
 
-	isTrue(): boolean {
-		if (!this.#condition1.isTrue()) {
+	isTrue(defines: Map<string, string>): boolean {
+		if (!this.#condition1.isTrue(defines)) {
 			return false;
 		}
-		return this.#condition2.isTrue();
+		return this.#condition2.isTrue(defines);
 	}
 }
 
@@ -52,29 +62,24 @@ class ConditionIsFalse implements Condition {
 		this.#condition = condition;
 	}
 
-	isTrue(): boolean {
-		return !this.#condition.isTrue();
+	isTrue(defines: Map<string, string>): boolean {
+		return !this.#condition.isTrue(defines);
 	}
 }
 
 let branchId = 0;
 class Branch {
 	#condition: Condition;
-	//#branchA: Branch;
-	//#branchB: Branch | null = null;
-	//#condition: string | null;
-	//#conditionIsTrue: boolean;
 	#lines: (string | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
 
 	constructor(condition: Condition) {
 		this.#condition = condition;
-		//this.#conditionIsTrue = conditionIsTrue;
 	}
 
 	addLine(line: string): boolean {
-		const preprocessorSymbols = /#([^\s]*)(\s*)/gm
+		const preprocessorSymbols = /#([^\s]*)\s*(.*)/g
 		// If we are in a subbranch, pass the line to the subbranch
 		if (this.#currentSubBranch) {
 			if (this.#currentSubBranch.addLine(line)) {
@@ -86,7 +91,7 @@ class Branch {
 		if (matchedSymbol) {
 			switch (matchedSymbol[1]) {
 				case 'ifdef':
-					this.#currentSubBranch = new Branch(new SimpleCondition(matchedSymbol[2]!));
+					this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'endif':
@@ -112,16 +117,17 @@ class Branch {
 		}
 	}
 
-	out(out: string[] = []): string[] {
+	out(out: string[] = [], defines: Map<string, string>): void {
+		if (!this.#condition.isTrue(defines)) {
+			return;
+		}
 		for (const line of this.#lines) {
 			if (typeof line == 'string') {
 				out.push(line);
 			} else {
-				line.out(out);
+				line.out(out, defines);
 			}
 		}
-
-		return out;
 	}
 }
 
@@ -151,7 +157,9 @@ function preprocess(lines: string[], defines: Map<string, string>): string[] {
 		*/
 	}
 
-	return branch.out();
+	const result: string[] = [];
+	branch.out(result, defines);
+	return result;
 }
 
 function expandIncludes(source: string): string[] {

@@ -142,7 +142,7 @@ export function addWgslInclude(name: string, source: string): void {
 	includes.set(name, source);
 }
 
-export function getIncludeSource(name: string): string | undefined {
+export function getWgslInclude(name: string): string | undefined {
 	return includes.get(name);
 }
 

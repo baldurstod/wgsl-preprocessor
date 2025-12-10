@@ -7,7 +7,7 @@ export declare type FinalLine = {
     includeLine?: FinalLine;
 };
 
-export declare function getIncludeSource(name: string): string | undefined;
+export declare function getWgslInclude(name: string): string | undefined;
 
 export declare function preprocessWgsl(source: string, defines?: Map<string, string>): string;
 

@@ -98,7 +98,7 @@ class Branch {
 function addWgslInclude(name, source) {
     includes.set(name, source);
 }
-function getIncludeSource(name) {
+function getWgslInclude(name) {
     return includes.get(name);
 }
 function preprocessWgsl(source, defines = new Map()) {
@@ -195,4 +195,4 @@ function getInclude(includeName, recursion = new Set(), allIncludes = new Set())
     return outArray;
 }
 
-export { addWgslInclude, getIncludeSource, preprocessWgsl, preprocessWgslLineMap };
+export { addWgslInclude, getWgslInclude, preprocessWgsl, preprocessWgslLineMap };

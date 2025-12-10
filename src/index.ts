@@ -67,7 +67,7 @@ class FlipCondition implements Condition {
 
 let branchId = 0;
 class Branch {
-	isBranch: true = true;
+	isBranch = true as const;
 	readonly condition: Condition;
 	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
@@ -142,6 +142,10 @@ export function addWgslInclude(name: string, source: string): void {
 	includes.set(name, source);
 }
 
+export function getIncludeSource(name: string): string | undefined {
+	return includes.get(name);
+}
+
 export type FinalLine = {
 	sourceName?: string;
 	line: string;
@@ -199,8 +203,7 @@ function expandIncludes(source: string): FinalLine[] {
 			const includeName = line.replace('#include', '').trim();
 			const include = getInclude(includeName, new Set(), allIncludes);
 			if (include) {
-				for (let j = 0; j < include.length; j++) {
-					const includeLine = include[j]!;
+				for (const includeLine of include) {
 					outArray.push({ line: includeLine.line, originalLine: i + 1, includeLine });
 
 				}
@@ -238,8 +241,7 @@ function getInclude(includeName: string, recursion = new Set<string>(), allInclu
 			const nestedIncludeName = line.replace('#include', '').trim();
 			const include = getInclude(nestedIncludeName, recursion, allIncludes);
 			if (include) {
-				for (let j = 0; j < include.length; j++) {
-					const includeLine = include[j]!;
+				for (const includeLine of include) {
 					outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i + 1, includeLine });
 				}
 			}

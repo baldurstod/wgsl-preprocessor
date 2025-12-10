@@ -98,6 +98,9 @@ class Branch {
 function addWgslInclude(name, source) {
     includes.set(name, source);
 }
+function getIncludeSource(name) {
+    return includes.get(name);
+}
 function preprocessWgsl(source, defines = new Map()) {
     const expandedArray = expandIncludes(source);
     const processedArray = preprocess(expandedArray, defines);
@@ -135,8 +138,7 @@ function expandIncludes(source) {
             const includeName = line.replace('#include', '').trim();
             const include = getInclude(includeName, new Set(), allIncludes);
             if (include) {
-                for (let j = 0; j < include.length; j++) {
-                    const includeLine = include[j];
+                for (const includeLine of include) {
                     outArray.push({ line: includeLine.line, originalLine: i + 1, includeLine });
                 }
                 include.length;
@@ -172,8 +174,7 @@ function getInclude(includeName, recursion = new Set(), allIncludes = new Set())
             const nestedIncludeName = line.replace('#include', '').trim();
             const include = getInclude(nestedIncludeName, recursion, allIncludes);
             if (include) {
-                for (let j = 0; j < include.length; j++) {
-                    const includeLine = include[j];
+                for (const includeLine of include) {
                     outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i + 1, includeLine });
                 }
             }
@@ -194,4 +195,4 @@ function getInclude(includeName, recursion = new Set(), allIncludes = new Set())
     return outArray;
 }
 
-export { addWgslInclude, preprocessWgsl, preprocessWgslLineMap };
+export { addWgslInclude, getIncludeSource, preprocessWgsl, preprocessWgslLineMap };

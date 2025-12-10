@@ -165,16 +165,12 @@ export function preprocessWgsl(source: string, defines: Map<string, string> = ne
 	return finalArray.join('\n');
 }
 
-export function preprocessWgslLineMap(source: string, defines: Map<string, string> = new Map<string, string>()): [string, FinalLine[]] {
+export function preprocessWgslLineMap(source: string, defines: Map<string, string> = new Map<string, string>()): FinalLine[] {
 	const expandedArray = expandIncludes(source);
 
 	const processedArray = preprocess(expandedArray, defines);
 
-	const finalArray: string[] = [];
-	for (const line of processedArray) {
-		finalArray.push(line.line);
-	}
-	return [finalArray.join('\n'), processedArray];
+	return processedArray;
 }
 
 function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
@@ -204,7 +200,7 @@ function expandIncludes(source: string): FinalLine[] {
 			const include = getInclude(includeName, new Set(), allIncludes);
 			if (include) {
 				for (const includeLine of include) {
-					outArray.push({ line: includeLine.line, originalLine: i + 1, includeLine });
+					outArray.push({ line: includeLine.line, originalLine: i, includeLine });
 
 				}
 				actualSize = include.length;
@@ -214,7 +210,7 @@ function expandIncludes(source: string): FinalLine[] {
 				}
 			}
 		} else {
-			outArray.push({ line, originalLine: i + 1, });
+			outArray.push({ line, originalLine: i, });
 		}
 		sizeOfSourceRow[i] = actualSize;
 	}
@@ -242,7 +238,7 @@ function getInclude(includeName: string, recursion = new Set<string>(), allInclu
 			const include = getInclude(nestedIncludeName, recursion, allIncludes);
 			if (include) {
 				for (const includeLine of include) {
-					outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i + 1, includeLine });
+					outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i, includeLine });
 				}
 			}
 			continue;
@@ -256,7 +252,7 @@ function getInclude(includeName: string, recursion = new Set<string>(), allInclu
 				continue;
 			}
 		}
-		outArray.push({ sourceName: includeName, line, originalLine: i + 1, });
+		outArray.push({ sourceName: includeName, line, originalLine: i, });
 	}
 	allIncludes.add(includeName);
 	return outArray;

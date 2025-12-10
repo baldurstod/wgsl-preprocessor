@@ -113,11 +113,7 @@ function preprocessWgsl(source, defines = new Map()) {
 function preprocessWgslLineMap(source, defines = new Map()) {
     const expandedArray = expandIncludes(source);
     const processedArray = preprocess(expandedArray, defines);
-    const finalArray = [];
-    for (const line of processedArray) {
-        finalArray.push(line.line);
-    }
-    return [finalArray.join('\n'), processedArray];
+    return processedArray;
 }
 function preprocess(lines, defines) {
     const branch = new Branch(new TrueCondition());
@@ -139,7 +135,7 @@ function expandIncludes(source) {
             const include = getInclude(includeName, new Set(), allIncludes);
             if (include) {
                 for (const includeLine of include) {
-                    outArray.push({ line: includeLine.line, originalLine: i + 1, includeLine });
+                    outArray.push({ line: includeLine.line, originalLine: i, includeLine });
                 }
                 include.length;
             }
@@ -150,7 +146,7 @@ function expandIncludes(source) {
             }
         }
         else {
-            outArray.push({ line, originalLine: i + 1, });
+            outArray.push({ line, originalLine: i, });
         }
     }
     return outArray;
@@ -175,7 +171,7 @@ function getInclude(includeName, recursion = new Set(), allIncludes = new Set())
             const include = getInclude(nestedIncludeName, recursion, allIncludes);
             if (include) {
                 for (const includeLine of include) {
-                    outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i + 1, includeLine });
+                    outArray.push({ sourceName: includeName, line: includeLine.line, originalLine: i, includeLine });
                 }
             }
             continue;
@@ -189,7 +185,7 @@ function getInclude(includeName, recursion = new Set(), allIncludes = new Set())
                 continue;
             }
         }
-        outArray.push({ sourceName: includeName, line, originalLine: i + 1, });
+        outArray.push({ sourceName: includeName, line, originalLine: i, });
     }
     allIncludes.add(includeName);
     return outArray;

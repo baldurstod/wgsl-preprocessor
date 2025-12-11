@@ -138,7 +138,7 @@ class Branch {
 	}
 }
 
-export function addWgslInclude(name: string, source: string): void {
+export function setWgslInclude(name: string, source: string): void {
 	includes.set(name, source);
 }
 

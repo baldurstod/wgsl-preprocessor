@@ -72,6 +72,7 @@ class Branch {
 	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
+	readonly defines = new Map<string, string>();
 
 	constructor(condition: Condition) {
 		this.condition = condition;
@@ -89,6 +90,13 @@ class Branch {
 		const matchedSymbol = preprocessorSymbols.exec(line.line);
 		if (matchedSymbol) {
 			switch (matchedSymbol[1]) {
+				// #define. defines are defined for the whole preprocessor branch they appear in
+				case 'define':
+					const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
+					if (defineSymbols && defineSymbols.length > 3) {
+						this.defines.set(defineSymbols[2]!, defineSymbols[3]!);
+					}
+					return true;
 				case 'ifdef':
 					this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
 					this.#lines.push(this.#currentSubBranch);
@@ -125,12 +133,19 @@ class Branch {
 	}
 
 	out(out: FinalLine[] = [], defines: Map<string, string>): void {
-		if (!this.condition.isTrue(defines)) {
+		// Concatenation of defines passed to the shader + defines in the shader code
+		const allDefines = new Map<string, string>(defines);
+
+		for (const define of this.defines) {
+			allDefines.set(...define);
+		}
+
+		if (!this.condition.isTrue(allDefines)) {
 			return;
 		}
 		for (const line of this.#lines) {
 			if ((line as Branch).isBranch) {
-				(line as Branch).out(out, defines);
+				(line as Branch).out(out, allDefines);
 			} else {
 				out.push(line as FinalLine);
 			}

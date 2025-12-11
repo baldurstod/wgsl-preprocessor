@@ -30,6 +30,7 @@ class Branch {
     #lines = [];
     #currentSubBranch = null;
     branchId = String(branchId++);
+    defines = new Map();
     constructor(condition) {
         this.condition = condition;
     }
@@ -44,6 +45,13 @@ class Branch {
         const matchedSymbol = preprocessorSymbols.exec(line.line);
         if (matchedSymbol) {
             switch (matchedSymbol[1]) {
+                // #define. defines are defined for the whole preprocessor branch they appear in
+                case 'define':
+                    const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
+                    if (defineSymbols && defineSymbols.length > 3) {
+                        this.defines.set(defineSymbols[2], defineSymbols[3]);
+                    }
+                    return true;
                 case 'ifdef':
                     this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]));
                     this.#lines.push(this.#currentSubBranch);
@@ -82,12 +90,17 @@ class Branch {
         }
     }
     out(out = [], defines) {
-        if (!this.condition.isTrue(defines)) {
+        // Concatenation of defines passed to the shader + defines in the shader code
+        const allDefines = new Map(defines);
+        for (const define of this.defines) {
+            allDefines.set(...define);
+        }
+        if (!this.condition.isTrue(allDefines)) {
             return;
         }
         for (const line of this.#lines) {
             if (line.isBranch) {
-                line.out(out, defines);
+                line.out(out, allDefines);
             }
             else {
                 out.push(line);

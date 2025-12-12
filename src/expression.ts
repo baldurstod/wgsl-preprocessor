@@ -81,7 +81,7 @@ function parseExpression(expression: string): ExpressionOperator | undefined {
 		}
 	}
 
-	console.log(operatorStack, valueStack);
+	//console.log(operatorStack, valueStack);
 
 
 	let ope: ExpressionOperator | undefined;
@@ -96,7 +96,7 @@ function parseExpression(expression: string): ExpressionOperator | undefined {
 }
 
 export function evaluateExpression(expression: string): ExpressionValue {
-	console.log(`evaluating expression <${expression}>`);
+	//console.log(`evaluating expression <${expression}>`);
 	const operator = parseExpression(expression);
 	return operator?.eval();
 }

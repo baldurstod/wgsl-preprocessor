@@ -60,6 +60,12 @@ class TrueCondition implements Condition {
 	}
 }
 
+class FalseCondition implements Condition {
+	isTrue(): boolean {
+		return false;
+	}
+}
+
 class FlipCondition implements Condition {
 	#condition: Condition;
 
@@ -79,17 +85,17 @@ class Branch {
 	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
-	readonly defines = new Map<string, string>();
+	//readonly defines = new Map<string, string>();
 
 	constructor(condition: Condition) {
 		this.condition = condition;
 	}
 
-	addLine(line: FinalLine): boolean {
+	addLine(line: FinalLine, defines: Map<string, string>): boolean {
 		const preprocessorSymbols = /#([^\s]*)\s*(.*)/g
 		// If we are in a subbranch, pass the line to the subbranch
 		if (this.#currentSubBranch) {
-			if (this.#currentSubBranch.addLine(line)) {
+			if (this.#currentSubBranch.addLine(line, defines)) {
 				return true;
 			}
 		}
@@ -97,15 +103,30 @@ class Branch {
 		const matchedSymbol = preprocessorSymbols.exec(line.line);
 		if (matchedSymbol) {
 			switch (matchedSymbol[1]) {
-				// #define. defines are defined for the whole preprocessor branch they appear in
+				// #define. defines are defined for the subsequent lines
 				case 'define':
 					const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
 					if (defineSymbols && defineSymbols.length > 3) {
-						this.defines.set(defineSymbols[2]!, defineSymbols[3]!);
+						//console.info('add define', defineSymbols)
+						defines.set(defineSymbols[2]!, defineSymbols[3]!);
+					}
+					return true;
+				case 'undef':
+					const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
+					if (undefSymbols && undefSymbols.length > 2) {
+						//console.info('remove define', undefSymbols)
+						defines.delete(undefSymbols[2]!);
 					}
 					return true;
 				case 'ifdef':
-					this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
+					//console.info(defines)
+					//this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
+					if (defines.has(matchedSymbol[2]!)) {
+						this.#currentSubBranch = new Branch(new TrueCondition());
+					} else {
+						this.#currentSubBranch = new Branch(new FalseCondition());
+					}
+
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'ifndef':
@@ -139,7 +160,7 @@ class Branch {
 			}
 		} else {
 			if (this.#currentSubBranch) {
-				return this.#currentSubBranch.addLine(line);
+				return this.#currentSubBranch.addLine(line, defines);
 			} else {
 				this.#lines.push(line);
 				return true;
@@ -148,19 +169,12 @@ class Branch {
 	}
 
 	out(out: FinalLine[] = [], defines: Map<string, string>): void {
-		// Concatenation of defines passed to the shader + defines in the shader code
-		const allDefines = new Map<string, string>(defines);
-
-		for (const define of this.defines) {
-			allDefines.set(...define);
-		}
-
-		if (!this.condition.isTrue(allDefines)) {
+		if (!this.condition.isTrue(defines)) {
 			return;
 		}
 		for (const line of this.#lines) {
 			if ((line as Branch).isBranch) {
-				(line as Branch).out(out, allDefines);
+				(line as Branch).out(out, defines);
 			} else {
 				out.push(line as FinalLine);
 			}
@@ -231,12 +245,13 @@ export class WgslPreprocessor {
 
 function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
 	const branch = new Branch(new TrueCondition());
+	const def = new Map(defines);
 	for (let i = 0, l = lines.length; i < l; ++i) {
-		branch.addLine(lines[i]!);
+		branch.addLine(lines[i]!, def);
 	}
 
 	const result: FinalLine[] = [];
-	branch.out(result, defines);
+	branch.out(result, new Map(defines));
 	return result;
 }
 

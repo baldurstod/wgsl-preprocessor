@@ -5,7 +5,7 @@ const includes = new Map<string, string>();
 const PRAGMA_REGEX = /#pragma (\w+)/;
 
 interface Condition {
-	isTrue: (defines: Map<string, string>) => boolean;
+	isTrue: (defines?: Map<string, string>) => boolean;
 }
 
 class ExpressionCondition implements Condition {
@@ -16,24 +16,12 @@ class ExpressionCondition implements Condition {
 		this.#expression = expression;
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
+	isTrue(defines?: Map<string, string>): boolean {
 		if (this.#result === undefined) {
 			this.#result = evaluateExpression(this.#expression) == true;
 		}
 
 		return this.#result;
-	}
-}
-
-class IsDefinedCondition implements Condition {
-	#condition: string;
-
-	constructor(condition: string) {
-		this.#condition = condition;
-	}
-
-	isTrue(defines: Map<string, string>): boolean {
-		return defines.has(this.#condition);
 	}
 }
 
@@ -46,7 +34,7 @@ class AndCondition implements Condition {
 		this.#condition2 = condition2;
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
+	isTrue(defines?: Map<string, string>): boolean {
 		if (!this.#condition1.isTrue(defines)) {
 			return false;
 		}
@@ -73,9 +61,16 @@ class FlipCondition implements Condition {
 		this.#condition = condition;
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
+	isTrue(defines?: Map<string, string>): boolean {
 		return !this.#condition.isTrue(defines);
 	}
+}
+
+function replaceDefine(line: string, defines: Map<string, string>): string {
+	for (let [oldValue, newValue] of defines) {
+		line = line.replace(oldValue, newValue);
+	}
+	return line;
 }
 
 let branchId = 0;
@@ -92,7 +87,7 @@ class Branch {
 	}
 
 	addLine(line: FinalLine, defines: Map<string, string>): boolean {
-		const preprocessorSymbols = /#([^\s]*)\s*(.*)/g
+		const preprocessorSymbols = /^\s*#([^\s]*)\s*(.*)/g
 		// If we are in a subbranch, pass the line to the subbranch
 		if (this.#currentSubBranch) {
 			if (this.#currentSubBranch.addLine(line, defines)) {
@@ -105,17 +100,22 @@ class Branch {
 			switch (matchedSymbol[1]) {
 				// #define. defines are defined for the subsequent lines
 				case 'define':
-					const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
-					if (defineSymbols && defineSymbols.length > 3) {
-						//console.info('add define', defineSymbols)
-						defines.set(defineSymbols[2]!, defineSymbols[3]!);
+					//console.info(this.condition);
+					if (this.condition.isTrue()) {
+						const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
+						if (defineSymbols && defineSymbols.length > 3) {
+							//console.info('add define', defineSymbols)
+							defines.set(defineSymbols[2]!, defineSymbols[3]!);
+						}
 					}
 					return true;
 				case 'undef':
-					const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
-					if (undefSymbols && undefSymbols.length > 2) {
-						//console.info('remove define', undefSymbols)
-						defines.delete(undefSymbols[2]!);
+					if (this.condition.isTrue()) {
+						const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
+						if (undefSymbols && undefSymbols.length > 2) {
+							//console.info('remove define', undefSymbols)
+							defines.delete(undefSymbols[2]!);
+						}
 					}
 					return true;
 				case 'ifdef':
@@ -130,11 +130,15 @@ class Branch {
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'ifndef':
-					this.#currentSubBranch = new Branch(new FlipCondition(new IsDefinedCondition(matchedSymbol[2]!)));
+					if (defines.has(matchedSymbol[2]!)) {
+						this.#currentSubBranch = new Branch(new FalseCondition());
+					} else {
+						this.#currentSubBranch = new Branch(new TrueCondition());
+					}
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'if':
-					this.#currentSubBranch = new Branch(new ExpressionCondition(matchedSymbol[2]!));
+					this.#currentSubBranch = new Branch(new ExpressionCondition(replaceDefine(matchedSymbol[2]!, defines)));
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'else':
@@ -162,6 +166,7 @@ class Branch {
 			if (this.#currentSubBranch) {
 				return this.#currentSubBranch.addLine(line, defines);
 			} else {
+				line.line = replaceDefine(line.line, defines);
 				this.#lines.push(line);
 				return true;
 			}

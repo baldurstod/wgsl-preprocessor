@@ -100,11 +100,9 @@ class Branch {
 			switch (matchedSymbol[1]) {
 				// #define. defines are defined for the subsequent lines
 				case 'define':
-					//console.info(this.condition);
 					if (this.condition.isTrue()) {
 						const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
 						if (defineSymbols && defineSymbols.length > 3) {
-							//console.info('add define', defineSymbols)
 							defines.set(defineSymbols[2]!, defineSymbols[3]!);
 						}
 					}
@@ -113,13 +111,11 @@ class Branch {
 					if (this.condition.isTrue()) {
 						const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
 						if (undefSymbols && undefSymbols.length > 2) {
-							//console.info('remove define', undefSymbols)
 							defines.delete(undefSymbols[2]!);
 						}
 					}
 					return true;
 				case 'ifdef':
-					//console.info(defines)
 					//this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
 					if (defines.has(matchedSymbol[2]!)) {
 						this.#currentSubBranch = new Branch(new TrueCondition());

@@ -39,14 +39,49 @@ class AddOperator implements ExpressionOperator {
 	}
 }
 
-class EqualOperator implements ExpressionOperator {
+class ComparisonOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
 	operators: [ExpressionOperator | undefined, ExpressionOperator | undefined] = [, ,];
 	readonly arguments = 2;
 
 	eval(): boolean {
-		//console.info('evaluating equal', this.operators)
 		return this.operators[0]?.eval() == this.operators[1]?.eval();
+	}
+}
+
+class EqualOperator extends ComparisonOperator {
+	eval(): boolean {
+		return this.operators[0]?.eval() == this.operators[1]?.eval();
+	}
+}
+
+class NotEqualOperator extends ComparisonOperator {
+	eval(): boolean {
+		return this.operators[0]?.eval() != this.operators[1]?.eval();
+	}
+}
+
+class LessOperator extends ComparisonOperator {
+	eval(): boolean {
+		return Number(this.operators[0]?.eval()) < Number(this.operators[1]?.eval());
+	}
+}
+
+class LessEqualOperator extends ComparisonOperator {
+	eval(): boolean {
+		return Number(this.operators[0]?.eval()) <= Number(this.operators[1]?.eval());
+	}
+}
+
+class GreaterOperator extends ComparisonOperator {
+	eval(): boolean {
+		return Number(this.operators[0]?.eval()) > Number(this.operators[1]?.eval());
+	}
+}
+
+class GreaterEqualOperator extends ComparisonOperator {
+	eval(): boolean {
+		return Number(this.operators[0]?.eval()) >= Number(this.operators[1]?.eval());
 	}
 }
 
@@ -76,18 +111,34 @@ function parseExpression(expression: string): ExpressionOperator | undefined {
 			case WgslToken.Equal:
 				operatorStack.push(new EqualOperator());
 				break;
+			case WgslToken.NotEqual:
+				operatorStack.push(new NotEqualOperator());
+				break;
+			case WgslToken.Less:
+				operatorStack.push(new LessOperator());
+				break;
+			case WgslToken.LessEqual:
+				operatorStack.push(new LessEqualOperator());
+				break;
+			case WgslToken.Greater:
+				operatorStack.push(new GreaterOperator());
+				break;
+			case WgslToken.GreaterEqual:
+				operatorStack.push(new GreaterEqualOperator());
+				break;
 			default:
-				valueStack.push(new LiteralOperator(token as string));
+				if (typeof token == 'string') {
+					valueStack.push(new LiteralOperator(token as string));
+				} else {
+					console.error('unknwon token', token);
+				}
 		}
 	}
-
-	//console.log(operatorStack, valueStack);
-
 
 	let ope: ExpressionOperator | undefined;
 	while (ope = operatorStack.pop()) {
 		for (let i = 0; i < ope.arguments; i++) {
-			ope.operators[i] = valueStack.pop();
+			ope.operators[ope.arguments - i - 1] = valueStack.pop();
 		}
 		valueStack.push(ope);
 	}
@@ -96,7 +147,6 @@ function parseExpression(expression: string): ExpressionOperator | undefined {
 }
 
 export function evaluateExpression(expression: string): ExpressionValue {
-	//console.log(`evaluating expression <${expression}>`);
 	const operator = parseExpression(expression);
 	return operator?.eval();
 }
@@ -208,7 +258,12 @@ function* getNextToken(source: string): Generator<WgslToken | string, void, unkn
 				yield WgslToken.Or;
 				break;
 			case '!':
-				yield WgslToken.Not;
+				if (charIterator.peek() == '=') {
+					charIterator.discard();
+					yield WgslToken.NotEqual;
+				} else {
+					yield WgslToken.Not;
+				}
 				break;
 			case '=':
 				if (charIterator.peek() == '=') {
@@ -217,16 +272,20 @@ function* getNextToken(source: string): Generator<WgslToken | string, void, unkn
 				}
 				break;
 			case '<':
-				yield WgslToken.Less;
-				break;
-			case '<=':
-				yield WgslToken.LessEqual;
+				if (charIterator.peek() == '=') {
+					charIterator.discard();
+					yield WgslToken.LessEqual;
+				} else {
+					yield WgslToken.Less;
+				}
 				break;
 			case '>':
-				yield WgslToken.Greater;
-				break;
-			case '>=':
-				yield WgslToken.GreaterEqual;
+				if (charIterator.peek() == '=') {
+					charIterator.discard();
+					yield WgslToken.GreaterEqual;
+				} else {
+					yield WgslToken.Greater;
+				}
 				break;
 			case ' ':
 			case '\t':

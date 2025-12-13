@@ -26,13 +26,42 @@ class AddOperator {
         return Number(this.operators[0]?.eval()) + Number(this.operators[1]?.eval());
     }
 }
-class EqualOperator {
+class ComparisonOperator {
     isExpressionOperator = true;
     operators = [, ,];
     arguments = 2;
     eval() {
-        //console.info('evaluating equal', this.operators)
         return this.operators[0]?.eval() == this.operators[1]?.eval();
+    }
+}
+class EqualOperator extends ComparisonOperator {
+    eval() {
+        return this.operators[0]?.eval() == this.operators[1]?.eval();
+    }
+}
+class NotEqualOperator extends ComparisonOperator {
+    eval() {
+        return this.operators[0]?.eval() != this.operators[1]?.eval();
+    }
+}
+class LessOperator extends ComparisonOperator {
+    eval() {
+        return Number(this.operators[0]?.eval()) < Number(this.operators[1]?.eval());
+    }
+}
+class LessEqualOperator extends ComparisonOperator {
+    eval() {
+        return Number(this.operators[0]?.eval()) <= Number(this.operators[1]?.eval());
+    }
+}
+class GreaterOperator extends ComparisonOperator {
+    eval() {
+        return Number(this.operators[0]?.eval()) > Number(this.operators[1]?.eval());
+    }
+}
+class GreaterEqualOperator extends ComparisonOperator {
+    eval() {
+        return Number(this.operators[0]?.eval()) >= Number(this.operators[1]?.eval());
     }
 }
 class LiteralOperator {
@@ -56,22 +85,40 @@ function parseExpression(expression) {
             case WgslToken.Equal:
                 operatorStack.push(new EqualOperator());
                 break;
+            case WgslToken.NotEqual:
+                operatorStack.push(new NotEqualOperator());
+                break;
+            case WgslToken.Less:
+                operatorStack.push(new LessOperator());
+                break;
+            case WgslToken.LessEqual:
+                operatorStack.push(new LessEqualOperator());
+                break;
+            case WgslToken.Greater:
+                operatorStack.push(new GreaterOperator());
+                break;
+            case WgslToken.GreaterEqual:
+                operatorStack.push(new GreaterEqualOperator());
+                break;
             default:
-                valueStack.push(new LiteralOperator(token));
+                if (typeof token == 'string') {
+                    valueStack.push(new LiteralOperator(token));
+                }
+                else {
+                    console.error('unknwon token', token);
+                }
         }
     }
-    //console.log(operatorStack, valueStack);
     let ope;
     while (ope = operatorStack.pop()) {
         for (let i = 0; i < ope.arguments; i++) {
-            ope.operators[i] = valueStack.pop();
+            ope.operators[ope.arguments - i - 1] = valueStack.pop();
         }
         valueStack.push(ope);
     }
     return valueStack[0];
 }
 function evaluateExpression(expression) {
-    //console.log(`evaluating expression <${expression}>`);
     const operator = parseExpression(expression);
     return operator?.eval();
 }
@@ -163,7 +210,13 @@ function* getNextToken(source) {
                 yield WgslToken.Or;
                 break;
             case '!':
-                yield WgslToken.Not;
+                if (charIterator.peek() == '=') {
+                    charIterator.discard();
+                    yield WgslToken.NotEqual;
+                }
+                else {
+                    yield WgslToken.Not;
+                }
                 break;
             case '=':
                 if (charIterator.peek() == '=') {
@@ -172,16 +225,22 @@ function* getNextToken(source) {
                 }
                 break;
             case '<':
-                yield WgslToken.Less;
-                break;
-            case '<=':
-                yield WgslToken.LessEqual;
+                if (charIterator.peek() == '=') {
+                    charIterator.discard();
+                    yield WgslToken.LessEqual;
+                }
+                else {
+                    yield WgslToken.Less;
+                }
                 break;
             case '>':
-                yield WgslToken.Greater;
-                break;
-            case '>=':
-                yield WgslToken.GreaterEqual;
+                if (charIterator.peek() == '=') {
+                    charIterator.discard();
+                    yield WgslToken.GreaterEqual;
+                }
+                else {
+                    yield WgslToken.Greater;
+                }
                 break;
             case ' ':
             case '\t':
@@ -261,11 +320,9 @@ class Branch {
             switch (matchedSymbol[1]) {
                 // #define. defines are defined for the subsequent lines
                 case 'define':
-                    //console.info(this.condition);
                     if (this.condition.isTrue()) {
                         const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
                         if (defineSymbols && defineSymbols.length > 3) {
-                            //console.info('add define', defineSymbols)
                             defines.set(defineSymbols[2], defineSymbols[3]);
                         }
                     }
@@ -274,13 +331,11 @@ class Branch {
                     if (this.condition.isTrue()) {
                         const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
                         if (undefSymbols && undefSymbols.length > 2) {
-                            //console.info('remove define', undefSymbols)
                             defines.delete(undefSymbols[2]);
                         }
                     }
                     return true;
                 case 'ifdef':
-                    //console.info(defines)
                     //this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
                     if (defines.has(matchedSymbol[2])) {
                         this.#currentSubBranch = new Branch(new TrueCondition());

@@ -17,79 +17,188 @@ export enum WgslToken {
 	//EOF,
 }
 
+enum Precedence {
+	Lowest = 0,
+	Ternary = Lowest + 1,
+	Additive = Ternary + 1,
+	Multiplicative = Additive + 1,
+	Function = Multiplicative + 1,
+	Literal = Function + 1,
+}
+
 type ExpressionValue = number | boolean | undefined | string;
+
+
+class Expression {
+	operators: (ExpressionOperator | ExpressionValue)[] = [];
+	//operands: ExpressionValue[] = [];
+
+	pushOperator(operator: ExpressionOperator | ExpressionValue): void {
+		this.operators.push(operator);
+	}
+
+	/*
+	pushOperand(operand: ExpressionValue): void {
+		this.operands.push(operand);
+	}
+	*/
+
+	eval(defines: Map<string, string>): ExpressionValue {
+		//console.info('eval', this.operators);
+
+		const operators = this.operators;
+		while (operators.length > 1) {
+			let opeIndex = 0;
+			let evalOpe: ExpressionOperator | undefined = undefined;
+			let precedence = Precedence.Lowest;
+			for (let i = 0; i < operators.length; i++) {
+				const ope = operators[i];
+				if (typeof ope == 'object') {
+					if (ope.precedence > precedence) {
+						precedence = ope.precedence;
+						evalOpe = ope;
+						opeIndex = i;
+					}
+				}
+			}
+
+			//console.info('evalOpe', evalOpe, operators);
+			if (evalOpe) {
+				switch (evalOpe.arguments) {
+					case 0:
+						//console.info('case 0 evalOpe', evalOpe);
+						const result0 = evalOpe.eval(defines);
+						operators.splice(opeIndex, 1, result0);
+						//console.info('case 0', operators);
+						break;
+					case 1:
+						throw new Error("TODO");
+
+						/*
+						//console.info('case 1 evalOpe', evalOpe);
+						const ope1 = operators[opeIndex - 1];
+						const ope2 = operators[opeIndex + 1];
+						//console.info(ope1, ope2);
+						evalOpe.operators = [ope1 as ExpressionValue, ope2 as ExpressionValue];
+						const result1 = evalOpe.eval(defines);
+						operators.splice(opeIndex - 1, 3, result1);
+						//console.info(operators);
+						break;
+						*/
+					case 2:
+						//console.info('case 2 evalOpe', evalOpe);
+						const operand1 = operators[opeIndex - 1];
+						const operand2 = operators[opeIndex + 1];
+						//console.info(operand1, operand2);
+						evalOpe.operators = [operand1 as ExpressionValue, operand2 as ExpressionValue];
+						const result = evalOpe.eval(defines);
+						operators.splice(opeIndex - 1, 3, result);
+						//console.info('case 2', operators);
+						break;
+					default:
+						throw new Error('Unknown argument count: ' + evalOpe.arguments);
+				}
+			} else {
+				throw new Error('No operation');
+
+			}
+			//console.info('eval return', operators[0], operators);
+			//return operators.pop() as ExpressionValue;
+		}
+
+		return operators.pop() as ExpressionValue;
+	}
+}
 
 interface ExpressionOperator {
 	isExpressionOperator: true;
 	readonly arguments: number;
+	readonly precedence: Precedence;
 
-	operators: (ExpressionOperator | undefined)[];
+	operators: (ExpressionValue | undefined)[];
 	eval: (defines: Map<string, string>) => ExpressionValue;
+}
+
+class GroupOperator implements ExpressionOperator {
+	isExpressionOperator = true as const;
+	operators: [ExpressionValue | undefined, ExpressionValue | undefined] = [, ,];
+	readonly expression = new Expression();
+	readonly arguments = 0;
+	readonly precedence = Precedence.Literal;
+
+	eval(defines: Map<string, string>): ExpressionValue {
+		return this.expression.eval(defines);
+	}
 }
 
 class AddOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
-	operators: [ExpressionOperator | undefined, ExpressionOperator | undefined] = [, ,];
+	operators: [ExpressionValue | undefined, ExpressionValue | undefined] = [, ,];
 	readonly arguments = 2;
+	readonly precedence = Precedence.Additive;
 
 	eval(defines: Map<string, string>): ExpressionValue {
-		return Number(this.operators[0]?.eval(defines)) + Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0] ?? 0) + Number(this.operators[1] ?? 0);
 	}
 }
 
 class MultiplyOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
-	operators: [ExpressionOperator | undefined, ExpressionOperator | undefined] = [, ,];
+	operators: [ExpressionValue | undefined, ExpressionValue | undefined] = [, ,];
 	readonly arguments = 2;
+	readonly precedence = Precedence.Multiplicative;
+
 
 	eval(defines: Map<string, string>): ExpressionValue {
-		return Number(this.operators[0]?.eval(defines)) * Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0] ?? 0) * Number(this.operators[1] ?? 0);
 	}
 }
 
 class ComparisonOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
-	operators: [ExpressionOperator | undefined, ExpressionOperator | undefined] = [, ,];
+	operators: [ExpressionValue | undefined, ExpressionValue | undefined] = [, ,];
 	readonly arguments = 2;
+	readonly precedence = Precedence.Additive;
+
 
 	eval(defines: Map<string, string>): boolean {
-		return this.operators[0]?.eval(defines) == this.operators[1]?.eval(defines);
+		return this.operators[0] == this.operators[1];
 	}
 }
 
 class EqualOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return this.operators[0]?.eval(defines) == this.operators[1]?.eval(defines);
+		return this.operators[0] == this.operators[1];
 	}
 }
 
 class NotEqualOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return this.operators[0]?.eval(defines) != this.operators[1]?.eval(defines);
+		return this.operators[0] != this.operators[1];
 	}
 }
 
 class LessOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return Number(this.operators[0]?.eval(defines)) < Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0]) < Number(this.operators[1]);
 	}
 }
 
 class LessEqualOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return Number(this.operators[0]?.eval(defines)) <= Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0]) <= Number(this.operators[1]);
 	}
 }
 
 class GreaterOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return Number(this.operators[0]?.eval(defines)) > Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0]) > Number(this.operators[1]);
 	}
 }
 
 class GreaterEqualOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
-		return Number(this.operators[0]?.eval(defines)) >= Number(this.operators[1]?.eval(defines));
+		return Number(this.operators[0]) >= Number(this.operators[1]);
 	}
 }
 
@@ -98,6 +207,7 @@ class LiteralOperator implements ExpressionOperator {
 	literalValue: ExpressionValue;
 	operators = [];
 	readonly arguments = 1;
+	readonly precedence = Precedence.Literal;
 
 	constructor(value: ExpressionValue) {
 		this.literalValue = value;
@@ -108,12 +218,14 @@ class LiteralOperator implements ExpressionOperator {
 	}
 }
 
-class DefinedOperator implements ExpressionOperator {
+class FunctionOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
 	defines: Map<string, string>;
 	literalValue: ExpressionValue;
 	operators = [];
 	readonly arguments = 1;
+	readonly precedence = Precedence.Function;
+
 
 	constructor(defines: Map<string, string>) {
 		this.defines = defines;
@@ -124,50 +236,84 @@ class DefinedOperator implements ExpressionOperator {
 	}
 }
 
-function parseExpression(expression: string, defines: Map<string, string>): ExpressionOperator | undefined {
+function parseExpression(expression: string, defines: Map<string, string>): Expression | undefined {
 	const tokenIterator = getNextToken(expression);
 
-	const operatorStack: ExpressionOperator[] = [];
-	const valueStack: ExpressionOperator[] = [];
+	//const operatorStack: ExpressionOperator[] = [];
+	//const valueStack: ExpressionOperator[] = [];
 
+	let currentExpression: Expression = new Expression();//expressionStack[expressionStack.length - 1]!;
+	const expressionStack: Expression[] = [currentExpression];
+
+	let previousToken: WgslToken | string | undefined = undefined;
 	for (const token of tokenIterator) {
 		switch (token) {
 			case WgslToken.Add:
-				operatorStack.push(new AddOperator());
+				currentExpression.pushOperator(new AddOperator());
 				break;
 			case WgslToken.Multiply:
-				operatorStack.push(new MultiplyOperator());
+				currentExpression.pushOperator(new MultiplyOperator());
 				break;
 			case WgslToken.Equal:
-				operatorStack.push(new EqualOperator());
+				currentExpression.pushOperator(new EqualOperator());
 				break;
 			case WgslToken.NotEqual:
-				operatorStack.push(new NotEqualOperator());
+				currentExpression.pushOperator(new NotEqualOperator());
 				break;
 			case WgslToken.Less:
-				operatorStack.push(new LessOperator());
+				currentExpression.pushOperator(new LessOperator());
 				break;
 			case WgslToken.LessEqual:
-				operatorStack.push(new LessEqualOperator());
+				currentExpression.pushOperator(new LessEqualOperator());
 				break;
 			case WgslToken.Greater:
-				operatorStack.push(new GreaterOperator());
+				currentExpression.pushOperator(new GreaterOperator());
 				break;
 			case WgslToken.GreaterEqual:
-				operatorStack.push(new GreaterEqualOperator());
+				currentExpression.pushOperator(new GreaterEqualOperator());
 				break;
+			/*
 			case 'defined':
-				operatorStack.push(new DefinedOperator(defines));
+				currentExpression.push(new DefinedOperator(defines));
+				break;
+			*/
+			case WgslToken.OpenParenthesis:
+				if (typeof previousToken == 'string') {
+					// function
+					currentExpression.pushOperator(new FunctionOperator(defines));
+				} else {
+					// start a new sub expression
+					const group = new GroupOperator();
+					currentExpression.pushOperator(group);
+					expressionStack.push(group.expression);
+					currentExpression = group.expression;
+				}
+				break;
+			case WgslToken.CloseParenthesis:
+				const exp = expressionStack.pop();
+				if (!exp) {
+					throw new Error('unmatched closing parenthesis');
+				}
+
+				currentExpression = exp;
+				/*
+				const group = new GroupOperator();
+				currentExpression.push(group);
+				expressionStack.push(group.expression);
+				currentExpression = group.expression;
+				*/
 				break;
 			default:
 				if (typeof token == 'string') {
-					valueStack.push(new LiteralOperator(token as string));
+					currentExpression.pushOperator(token as string);
 				} else {
 					console.error('unknwon token', token);
 				}
 		}
+		previousToken = token;
 	}
 
+	/*
 	let ope: ExpressionOperator | undefined;
 	while (ope = operatorStack.pop()) {
 		//console.info(ope);
@@ -176,12 +322,14 @@ function parseExpression(expression: string, defines: Map<string, string>): Expr
 		}
 		valueStack.push(ope);
 	}
+	*/
 
-	return valueStack[0];
+	return expressionStack[0];
 }
 
 export function evaluateExpression(expression: string, defines: Map<string, string>): ExpressionValue {
 	const operator = parseExpression(expression, defines);
+	//console.log(operator);
 	return operator?.eval(defines);
 }
 

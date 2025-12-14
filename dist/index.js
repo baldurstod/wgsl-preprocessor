@@ -84,6 +84,9 @@ class Expression {
                     break;
                     */
                     case 2:
+                        if (opeIndex < 1) {
+                            return false;
+                        }
                         //console.info('case 2 evalOpe', evalOpe);
                         const operand1 = operators[opeIndex - 1];
                         const operand2 = operators[opeIndex + 1];

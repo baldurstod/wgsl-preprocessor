@@ -174,6 +174,18 @@ class ComparisonOperator implements ExpressionOperator {
 	}
 }
 
+class AndOperator extends ComparisonOperator {
+	eval(defines: Map<string, string>): boolean {
+		return (this.operators[0] as boolean) && (this.operators[1] as boolean);
+	}
+}
+
+class OrOperator extends ComparisonOperator {
+	eval(defines: Map<string, string>): boolean {
+		return (this.operators[0] as boolean) || (this.operators[1] as boolean);
+	}
+}
+
 class EqualOperator extends ComparisonOperator {
 	eval(defines: Map<string, string>): boolean {
 		return this.operators[0] == this.operators[1];
@@ -273,6 +285,12 @@ function parseExpression(expression: string, defines: Map<string, string>): Expr
 			case WgslToken.Multiply:
 				currentExpression.pushOperator(new MultiplyOperator());
 				break;
+			case WgslToken.And:
+				currentExpression.pushOperator(new AndOperator());
+				break;
+			case WgslToken.Or:
+				currentExpression.pushOperator(new OrOperator());
+				break;
 			case WgslToken.Equal:
 				currentExpression.pushOperator(new EqualOperator());
 				break;
@@ -331,7 +349,7 @@ function parseExpression(expression: string, defines: Map<string, string>): Expr
 				if (typeof token == 'string') {
 					currentExpression.pushOperator(token as string);
 				} else {
-					console.error('unknwon token', token);
+					console.error('unknown token', token);
 				}
 		}
 		previousToken = token;
@@ -457,11 +475,17 @@ function* getNextToken(source: string): Generator<WgslToken | string, void, unkn
 			case '/':
 				yield WgslToken.Divide;
 				break;
-			case '&&':
-				yield WgslToken.And;
+			case '&':
+				if (charIterator.peek() == '&') {
+					charIterator.discard();
+					yield WgslToken.And;
+				}
 				break;
-			case '||':
-				yield WgslToken.Or;
+			case '|':
+				if (charIterator.peek() == '|') {
+					charIterator.discard();
+					yield WgslToken.Or;
+				}
 				break;
 			case '!':
 				if (charIterator.peek() == '=') {

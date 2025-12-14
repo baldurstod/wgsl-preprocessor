@@ -32,6 +32,12 @@ enum Precedence {
 
 type ExpressionValue = number | boolean | undefined | string;
 
+export function replaceDefine(line: string, defines: Map<string, string>): string {
+	for (let [oldValue, newValue] of defines) {
+		line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+	}
+	return line;
+}
 
 class Expression {
 	operators: (ExpressionOperator | ExpressionValue)[] = [];
@@ -98,8 +104,16 @@ class Expression {
 							return false;
 						}
 						//console.info('case 2 evalOpe', evalOpe);
-						const operand1 = operators[opeIndex - 1];
-						const operand2 = operators[opeIndex + 1];
+						let operand1 = operators[opeIndex - 1];
+						let operand2 = operators[opeIndex + 1];
+
+						if (typeof operand1 == 'string') {
+							operand1 = replaceDefine(operand1, defines);
+						}
+
+						if (typeof operand2 == 'string') {
+							operand2 = replaceDefine(operand2, defines);
+						}
 						//console.info(operand1, operand2);
 						evalOpe.operators = [operand1 as ExpressionValue, operand2 as ExpressionValue];
 						const result = evalOpe.eval(defines);

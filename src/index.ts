@@ -1,4 +1,4 @@
-import { evaluateExpression } from './expression';
+import { evaluateExpression, replaceDefine } from './expression';
 export { evaluateExpression };
 
 const includes = new Map<string, string>();
@@ -6,20 +6,22 @@ const includes = new Map<string, string>();
 const PRAGMA_REGEX = /#pragma (\w+)/;
 
 interface Condition {
-	isTrue: (defines: Map<string, string>) => boolean;
+	isTrue: () => boolean;
 }
 
 class ExpressionCondition implements Condition {
 	#expression: string;
+	#defines: Map<string, string>;
 	#result?: boolean;
 
-	constructor(expression: string) {
+	constructor(expression: string, readonly defines: Map<string, string>) {
 		this.#expression = expression;
+		this.#defines = new Map(defines);
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
+	isTrue(): boolean {
 		if (this.#result === undefined) {
-			this.#result = evaluateExpression(this.#expression, defines) == true;
+			this.#result = evaluateExpression(this.#expression, this.#defines) == true;
 		}
 
 		return this.#result;
@@ -35,11 +37,11 @@ class AndCondition implements Condition {
 		this.#condition2 = condition2;
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
-		if (!this.#condition1.isTrue(defines)) {
+	isTrue(): boolean {
+		if (!this.#condition1.isTrue()) {
 			return false;
 		}
-		return this.#condition2.isTrue(defines);
+		return this.#condition2.isTrue();
 	}
 }
 
@@ -62,16 +64,9 @@ class FlipCondition implements Condition {
 		this.#condition = condition;
 	}
 
-	isTrue(defines: Map<string, string>): boolean {
-		return !this.#condition.isTrue(defines);
+	isTrue(): boolean {
+		return !this.#condition.isTrue();
 	}
-}
-
-function replaceDefine(line: string, defines: Map<string, string>): string {
-	for (let [oldValue, newValue] of defines) {
-		line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
-	}
-	return line;
 }
 
 let branchId = 0;
@@ -101,7 +96,7 @@ class Branch {
 			switch (matchedSymbol[1]) {
 				// #define. defines are defined for the subsequent lines
 				case 'define':
-					if (this.condition.isTrue(defines)) {
+					if (this.condition.isTrue()) {
 						const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
 						if (defineSymbols && defineSymbols.length > 3) {
 							defines.set(defineSymbols[2]!, defineSymbols[3]!);
@@ -109,7 +104,7 @@ class Branch {
 					}
 					return true;
 				case 'undef':
-					if (this.condition.isTrue(defines)) {
+					if (this.condition.isTrue()) {
 						const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
 						if (undefSymbols && undefSymbols.length > 2) {
 							defines.delete(undefSymbols[2]!);
@@ -135,7 +130,7 @@ class Branch {
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'if':
-					this.#currentSubBranch = new Branch(new ExpressionCondition(replaceDefine(matchedSymbol[2]!, defines)));
+					this.#currentSubBranch = new Branch(new ExpressionCondition(matchedSymbol[2]!, defines));
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'else':
@@ -170,13 +165,13 @@ class Branch {
 		}
 	}
 
-	out(out: FinalLine[] = [], defines: Map<string, string>): void {
-		if (!this.condition.isTrue(defines)) {
+	out(out: FinalLine[] = []): void {
+		if (!this.condition.isTrue()) {
 			return;
 		}
 		for (const line of this.#lines) {
 			if ((line as Branch).isBranch) {
-				(line as Branch).out(out, defines);
+				(line as Branch).out(out);
 			} else {
 				out.push(line as FinalLine);
 			}
@@ -253,7 +248,7 @@ function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine
 	}
 
 	const result: FinalLine[] = [];
-	branch.out(result, new Map(defines));
+	branch.out(result);
 	return result;
 }
 

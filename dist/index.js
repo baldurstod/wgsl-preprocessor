@@ -30,6 +30,12 @@ var Precedence;
     Precedence[Precedence["Function"] = 8] = "Function";
     Precedence[Precedence["Literal"] = 9] = "Literal";
 })(Precedence || (Precedence = {}));
+function replaceDefine(line, defines) {
+    for (let [oldValue, newValue] of defines) {
+        line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+    }
+    return line;
+}
 class Expression {
     operators = [];
     //operands: ExpressionValue[] = [];
@@ -88,8 +94,14 @@ class Expression {
                             return false;
                         }
                         //console.info('case 2 evalOpe', evalOpe);
-                        const operand1 = operators[opeIndex - 1];
-                        const operand2 = operators[opeIndex + 1];
+                        let operand1 = operators[opeIndex - 1];
+                        let operand2 = operators[opeIndex + 1];
+                        if (typeof operand1 == 'string') {
+                            operand1 = replaceDefine(operand1, defines);
+                        }
+                        if (typeof operand2 == 'string') {
+                            operand2 = replaceDefine(operand2, defines);
+                        }
                         //console.info(operand1, operand2);
                         evalOpe.operators = [operand1, operand2];
                         const result = evalOpe.eval(defines);
@@ -478,14 +490,18 @@ function* getNextToken(source) {
 const includes = new Map();
 const PRAGMA_REGEX = /#pragma (\w+)/;
 class ExpressionCondition {
+    defines;
     #expression;
+    #defines;
     #result;
-    constructor(expression) {
+    constructor(expression, defines) {
+        this.defines = defines;
         this.#expression = expression;
+        this.#defines = new Map(defines);
     }
-    isTrue(defines) {
+    isTrue() {
         if (this.#result === undefined) {
-            this.#result = evaluateExpression(this.#expression, defines) == true;
+            this.#result = evaluateExpression(this.#expression, this.#defines) == true;
         }
         return this.#result;
     }
@@ -505,15 +521,9 @@ class FlipCondition {
     constructor(condition) {
         this.#condition = condition;
     }
-    isTrue(defines) {
-        return !this.#condition.isTrue(defines);
+    isTrue() {
+        return !this.#condition.isTrue();
     }
-}
-function replaceDefine(line, defines) {
-    for (let [oldValue, newValue] of defines) {
-        line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
-    }
-    return line;
 }
 let branchId = 0;
 class Branch {
@@ -539,7 +549,7 @@ class Branch {
             switch (matchedSymbol[1]) {
                 // #define. defines are defined for the subsequent lines
                 case 'define':
-                    if (this.condition.isTrue(defines)) {
+                    if (this.condition.isTrue()) {
                         const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
                         if (defineSymbols && defineSymbols.length > 3) {
                             defines.set(defineSymbols[2], defineSymbols[3]);
@@ -547,7 +557,7 @@ class Branch {
                     }
                     return true;
                 case 'undef':
-                    if (this.condition.isTrue(defines)) {
+                    if (this.condition.isTrue()) {
                         const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
                         if (undefSymbols && undefSymbols.length > 2) {
                             defines.delete(undefSymbols[2]);
@@ -574,7 +584,7 @@ class Branch {
                     this.#lines.push(this.#currentSubBranch);
                     return true;
                 case 'if':
-                    this.#currentSubBranch = new Branch(new ExpressionCondition(replaceDefine(matchedSymbol[2], defines)));
+                    this.#currentSubBranch = new Branch(new ExpressionCondition(matchedSymbol[2], defines));
                     this.#lines.push(this.#currentSubBranch);
                     return true;
                 case 'else':
@@ -611,13 +621,13 @@ class Branch {
             }
         }
     }
-    out(out = [], defines) {
-        if (!this.condition.isTrue(defines)) {
+    out(out = []) {
+        if (!this.condition.isTrue()) {
             return;
         }
         for (const line of this.#lines) {
             if (line.isBranch) {
-                line.out(out, defines);
+                line.out(out);
             }
             else {
                 out.push(line);
@@ -671,7 +681,7 @@ function preprocess(lines, defines) {
         branch.addLine(lines[i], def);
     }
     const result = [];
-    branch.out(result, new Map(defines));
+    branch.out(result);
     return result;
 }
 function expandIncludes(source) {

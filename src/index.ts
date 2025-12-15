@@ -72,14 +72,20 @@ class FlipCondition implements Condition {
 let branchId = 0;
 class Branch {
 	isBranch = true as const;
+	readonly parent: Branch | null;
 	readonly condition: Condition;
 	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
 	readonly branchId = String(branchId++);
 	//readonly defines = new Map<string, string>();
 
-	constructor(condition: Condition) {
+	constructor(parent: Branch | null, condition: Condition) {
+		this.parent = parent;
 		this.condition = condition;
+	}
+
+	isTrue(): boolean {
+		return (this.parent?.isTrue() ?? true) && this.condition.isTrue();
 	}
 
 	addLine(line: FinalLine, defines: Map<string, string>): boolean {
@@ -96,7 +102,7 @@ class Branch {
 			switch (matchedSymbol[1]) {
 				// #define. defines are defined for the subsequent lines
 				case 'define':
-					if (this.condition.isTrue()) {
+					if (this.isTrue()) {
 						const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
 						if (defineSymbols && defineSymbols.length > 3) {
 							defines.set(defineSymbols[2]!, defineSymbols[3]!);
@@ -104,7 +110,7 @@ class Branch {
 					}
 					return true;
 				case 'undef':
-					if (this.condition.isTrue()) {
+					if (this.isTrue()) {
 						const undefSymbols = /#([^\s]*)\s*([^\s]*)/g.exec(line.line);
 						if (undefSymbols && undefSymbols.length > 2) {
 							defines.delete(undefSymbols[2]!);
@@ -114,28 +120,28 @@ class Branch {
 				case 'ifdef':
 					//this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
 					if (defines.has(matchedSymbol[2]!)) {
-						this.#currentSubBranch = new Branch(new TrueCondition());
+						this.#currentSubBranch = new Branch(this, new TrueCondition());
 					} else {
-						this.#currentSubBranch = new Branch(new FalseCondition());
+						this.#currentSubBranch = new Branch(this, new FalseCondition());
 					}
 
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'ifndef':
 					if (defines.has(matchedSymbol[2]!)) {
-						this.#currentSubBranch = new Branch(new FalseCondition());
+						this.#currentSubBranch = new Branch(this, new FalseCondition());
 					} else {
-						this.#currentSubBranch = new Branch(new TrueCondition());
+						this.#currentSubBranch = new Branch(this, new TrueCondition());
 					}
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'if':
-					this.#currentSubBranch = new Branch(new ExpressionCondition(matchedSymbol[2]!, defines));
+					this.#currentSubBranch = new Branch(this, new ExpressionCondition(matchedSymbol[2]!, defines));
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'else':
 					if (this.#currentSubBranch) {
-						this.#currentSubBranch = new Branch(new FlipCondition(this.#currentSubBranch.condition));
+						this.#currentSubBranch = new Branch(this, new FlipCondition(this.#currentSubBranch.condition));
 						this.#lines.push(this.#currentSubBranch);
 					} else {
 						return false;
@@ -166,7 +172,7 @@ class Branch {
 	}
 
 	out(out: FinalLine[] = []): void {
-		if (!this.condition.isTrue()) {
+		if (!this.isTrue()) {
 			return;
 		}
 		for (const line of this.#lines) {
@@ -241,7 +247,7 @@ export class WgslPreprocessor {
 }
 
 function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
-	const branch = new Branch(new TrueCondition());
+	const branch = new Branch(null, new TrueCondition());
 	const def = new Map(defines);
 	for (let i = 0, l = lines.length; i < l; ++i) {
 		branch.addLine(lines[i]!, def);

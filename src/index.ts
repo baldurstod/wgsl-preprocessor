@@ -118,20 +118,12 @@ class Branch {
 					}
 					return true;
 				case 'ifdef':
-					//this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
-					if (defines.has(matchedSymbol[2]!)) {
-						this.#currentSubBranch = new Branch(this, new TrueCondition());
-					} else {
-						this.#currentSubBranch = new Branch(this, new FalseCondition());
-					}
-
-					this.#lines.push(this.#currentSubBranch);
-					return true;
 				case 'ifndef':
+					const ifDef = matchedSymbol[1] === 'ifdef';
 					if (defines.has(matchedSymbol[2]!)) {
-						this.#currentSubBranch = new Branch(this, new FalseCondition());
+						this.#currentSubBranch = new Branch(this, ifDef ? new TrueCondition(): new FalseCondition());
 					} else {
-						this.#currentSubBranch = new Branch(this, new TrueCondition());
+						this.#currentSubBranch = new Branch(this, ifDef ? new FalseCondition(): new TrueCondition());
 					}
 					this.#lines.push(this.#currentSubBranch);
 					return true;

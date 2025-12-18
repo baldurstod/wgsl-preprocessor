@@ -57,15 +57,23 @@ class FalseCondition implements Condition {
 	}
 }
 
-class FlipCondition implements Condition {
-	#condition: Condition;
+class ElseCondition implements Condition {
+	#previousBranch: Branch
 
-	constructor(condition: Condition) {
-		this.#condition = condition;
+	constructor(previousBranch: Branch) {
+		this.#previousBranch = previousBranch;
 	}
 
 	isTrue(): boolean {
-		return !this.#condition.isTrue();
+		let previousBranch: Branch | null = this.#previousBranch;
+		while (previousBranch) {
+			if (previousBranch.isTrue()) {
+				return false;
+			}
+
+			previousBranch = previousBranch.previousSibling;
+		}
+		return true;
 	}
 }
 
@@ -76,12 +84,13 @@ class Branch {
 	readonly condition: Condition;
 	#lines: (FinalLine | Branch)[] = [];
 	#currentSubBranch: Branch | null = null;
+	readonly previousSibling: Branch | null = null;
 	readonly branchId = String(branchId++);
-	//readonly defines = new Map<string, string>();
 
-	constructor(parent: Branch | null, condition: Condition) {
+	constructor(parent: Branch | null, previousSibling: Branch | null, condition: Condition) {
 		this.parent = parent;
 		this.condition = condition;
+		this.previousSibling = previousSibling;
 	}
 
 	isTrue(): boolean {
@@ -121,19 +130,41 @@ class Branch {
 				case 'ifndef':
 					const ifDef = matchedSymbol[1] === 'ifdef';
 					if (defines.has(matchedSymbol[2]!)) {
-						this.#currentSubBranch = new Branch(this, ifDef ? new TrueCondition(): new FalseCondition());
+						this.#currentSubBranch = new Branch(this, null, ifDef ? new TrueCondition() : new FalseCondition());
 					} else {
-						this.#currentSubBranch = new Branch(this, ifDef ? new FalseCondition(): new TrueCondition());
+						this.#currentSubBranch = new Branch(this, null, ifDef ? new FalseCondition() : new TrueCondition());
 					}
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'if':
-					this.#currentSubBranch = new Branch(this, new ExpressionCondition(matchedSymbol[2]!, defines));
+					this.#currentSubBranch = new Branch(this, null, new ExpressionCondition(matchedSymbol[2]!, defines));
 					this.#lines.push(this.#currentSubBranch);
 					return true;
 				case 'else':
 					if (this.#currentSubBranch) {
-						this.#currentSubBranch = new Branch(this, new FlipCondition(this.#currentSubBranch.condition));
+						this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new ElseCondition(this.#currentSubBranch));
+						this.#lines.push(this.#currentSubBranch);
+					} else {
+						return false;
+					}
+					return true;
+				case 'elif':
+					if (this.#currentSubBranch) {
+						this.#currentSubBranch = new Branch(this, null, new AndCondition(new ExpressionCondition(matchedSymbol[2]!, defines), new ElseCondition(this.#currentSubBranch)));
+						this.#lines.push(this.#currentSubBranch);
+					} else {
+						return false;
+					}
+					return true;
+				case 'elifdef':
+				case 'elifndef':
+					if (this.#currentSubBranch) {
+						const elifDef = matchedSymbol[1] === 'elifdef';
+						if (defines.has(matchedSymbol[2]!)) {
+							this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new AndCondition(elifDef ? new TrueCondition() : new FalseCondition(), new ElseCondition(this.#currentSubBranch)));
+						} else {
+							this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new AndCondition(elifDef ? new FalseCondition() : new TrueCondition(), new ElseCondition(this.#currentSubBranch)));
+						}
 						this.#lines.push(this.#currentSubBranch);
 					} else {
 						return false;
@@ -239,7 +270,7 @@ export class WgslPreprocessor {
 }
 
 function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
-	const branch = new Branch(null, new TrueCondition());
+	const branch = new Branch(null, null, new TrueCondition());
 	const def = new Map(defines);
 	for (let i = 0, l = lines.length; i < l; ++i) {
 		branch.addLine(lines[i]!, def);

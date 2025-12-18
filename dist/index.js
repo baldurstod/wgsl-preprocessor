@@ -507,6 +507,20 @@ class ExpressionCondition {
         return this.#result;
     }
 }
+class AndCondition {
+    #condition1;
+    #condition2;
+    constructor(condition1, condition2) {
+        this.#condition1 = condition1;
+        this.#condition2 = condition2;
+    }
+    isTrue() {
+        if (!this.#condition1.isTrue()) {
+            return false;
+        }
+        return this.#condition2.isTrue();
+    }
+}
 class TrueCondition {
     isTrue() {
         return true;
@@ -517,13 +531,20 @@ class FalseCondition {
         return false;
     }
 }
-class FlipCondition {
-    #condition;
-    constructor(condition) {
-        this.#condition = condition;
+class ElseCondition {
+    #previousBranch;
+    constructor(previousBranch) {
+        this.#previousBranch = previousBranch;
     }
     isTrue() {
-        return !this.#condition.isTrue();
+        let previousBranch = this.#previousBranch;
+        while (previousBranch) {
+            if (previousBranch.isTrue()) {
+                return false;
+            }
+            previousBranch = previousBranch.previousSibling;
+        }
+        return true;
     }
 }
 let branchId = 0;
@@ -533,11 +554,12 @@ class Branch {
     condition;
     #lines = [];
     #currentSubBranch = null;
+    previousSibling = null;
     branchId = String(branchId++);
-    //readonly defines = new Map<string, string>();
-    constructor(parent, condition) {
+    constructor(parent, previousSibling, condition) {
         this.parent = parent;
         this.condition = condition;
+        this.previousSibling = previousSibling;
     }
     isTrue() {
         return (this.parent?.isTrue() ?? true) && this.condition.isTrue();
@@ -571,31 +593,48 @@ class Branch {
                     }
                     return true;
                 case 'ifdef':
-                    //this.#currentSubBranch = new Branch(new IsDefinedCondition(matchedSymbol[2]!));
-                    if (defines.has(matchedSymbol[2])) {
-                        this.#currentSubBranch = new Branch(this, new TrueCondition());
-                    }
-                    else {
-                        this.#currentSubBranch = new Branch(this, new FalseCondition());
-                    }
-                    this.#lines.push(this.#currentSubBranch);
-                    return true;
                 case 'ifndef':
+                    const ifDef = matchedSymbol[1] === 'ifdef';
                     if (defines.has(matchedSymbol[2])) {
-                        this.#currentSubBranch = new Branch(this, new FalseCondition());
+                        this.#currentSubBranch = new Branch(this, null, ifDef ? new TrueCondition() : new FalseCondition());
                     }
                     else {
-                        this.#currentSubBranch = new Branch(this, new TrueCondition());
+                        this.#currentSubBranch = new Branch(this, null, ifDef ? new FalseCondition() : new TrueCondition());
                     }
                     this.#lines.push(this.#currentSubBranch);
                     return true;
                 case 'if':
-                    this.#currentSubBranch = new Branch(this, new ExpressionCondition(matchedSymbol[2], defines));
+                    this.#currentSubBranch = new Branch(this, null, new ExpressionCondition(matchedSymbol[2], defines));
                     this.#lines.push(this.#currentSubBranch);
                     return true;
                 case 'else':
                     if (this.#currentSubBranch) {
-                        this.#currentSubBranch = new Branch(this, new FlipCondition(this.#currentSubBranch.condition));
+                        this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new ElseCondition(this.#currentSubBranch));
+                        this.#lines.push(this.#currentSubBranch);
+                    }
+                    else {
+                        return false;
+                    }
+                    return true;
+                case 'elif':
+                    if (this.#currentSubBranch) {
+                        this.#currentSubBranch = new Branch(this, null, new AndCondition(new ExpressionCondition(matchedSymbol[2], defines), new ElseCondition(this.#currentSubBranch)));
+                        this.#lines.push(this.#currentSubBranch);
+                    }
+                    else {
+                        return false;
+                    }
+                    return true;
+                case 'elifdef':
+                case 'elifndef':
+                    if (this.#currentSubBranch) {
+                        const elifDef = matchedSymbol[1] === 'elifdef';
+                        if (defines.has(matchedSymbol[2])) {
+                            this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new AndCondition(elifDef ? new TrueCondition() : new FalseCondition(), new ElseCondition(this.#currentSubBranch)));
+                        }
+                        else {
+                            this.#currentSubBranch = new Branch(this, this.#currentSubBranch, new AndCondition(elifDef ? new FalseCondition() : new TrueCondition(), new ElseCondition(this.#currentSubBranch)));
+                        }
                         this.#lines.push(this.#currentSubBranch);
                     }
                     else {
@@ -681,7 +720,7 @@ class WgslPreprocessor {
     }
 }
 function preprocess(lines, defines) {
-    const branch = new Branch(null, new TrueCondition());
+    const branch = new Branch(null, null, new TrueCondition());
     const def = new Map(defines);
     for (let i = 0, l = lines.length; i < l; ++i) {
         branch.addLine(lines[i], def);

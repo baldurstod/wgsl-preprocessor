@@ -2,6 +2,7 @@ import { WgslPreprocessor } from '../dist/index.js'
 
 const s = `
 #ifdef TEST1
+	test1 is defined
 	#ifdef TEST2
 		test2 is defined
 	#else
@@ -14,6 +15,17 @@ const s = `
 	#endif
 #endif
 `
-
+const s2 = `
+#ifdef TEST1
+	test1 is defined
+#elifdef TEST2
+	test2 is defined
+#elifndef TEST3
+	test3 is NOT defined
+#else
+	nothing is defined
+#endif
+`
 
 console.info(WgslPreprocessor.preprocessWgsl(s, new Map([['TEST1']])));
+console.info(WgslPreprocessor.preprocessWgsl(s2, new Map([['TEST1']])));

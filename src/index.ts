@@ -260,7 +260,7 @@ export class WgslPreprocessor {
 		return includes;
 	}
 
-	static preprocessWgslLineMap(source: string, defines: Map<string, string> = new Map<string, string>()): FinalLine[] {
+	static preprocessWgslSourceMap(source: string, defines: Map<string, string> = new Map<string, string>()): FinalLine[] {
 		const expandedArray = expandIncludes(source);
 
 		const processedArray = preprocess(expandedArray, defines);

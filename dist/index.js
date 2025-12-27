@@ -690,9 +690,29 @@ class WgslPreprocessor {
     static preprocessWgsl(source, defines = new Map()) {
         const expandedArray = expandIncludes(source);
         const processedArray = preprocess(expandedArray, defines);
+        const locations = new Map();
+        const locationRegEx = /@location\((\D\w*)\)/g;
+        const locationRegExSingle = /@location\((\D\w*)\)/;
         const finalArray = [];
         for (const line of processedArray) {
-            finalArray.push(line.line);
+            let currentLine = line.line;
+            // Note: we don't use matchAll cause we update the line
+            while (true) {
+                const result = locationRegEx.exec(currentLine);
+                if (!result || result.length < 2) {
+                    finalArray.push(currentLine);
+                    break;
+                }
+                const locationName = result[1];
+                let currentLocation = locations.get(locationName);
+                if (currentLocation === undefined) {
+                    currentLocation = 0;
+                    locations.set(locationName, 0);
+                }
+                currentLine = currentLine.replace(locationRegExSingle, `@location(${currentLocation})`);
+                ++currentLocation;
+                locations.set(locationName, currentLocation);
+            }
         }
         return finalArray.join('\n');
     }
@@ -713,7 +733,7 @@ class WgslPreprocessor {
         }
         return includes;
     }
-    static preprocessWgslLineMap(source, defines = new Map()) {
+    static preprocessWgslSourceMap(source, defines = new Map()) {
         const expandedArray = expandIncludes(source);
         const processedArray = preprocess(expandedArray, defines);
         return processedArray;

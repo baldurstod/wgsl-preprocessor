@@ -14,7 +14,7 @@ export declare class WgslPreprocessor {
     static getWgslInclude(name: string): string | undefined;
     static preprocessWgsl(source: string, defines?: Map<string, string>): string;
     static getIncludeList(source: string, defines?: Map<string, string>): Set<string>;
-    static preprocessWgslLineMap(source: string, defines?: Map<string, string>): FinalLine[];
+    static preprocessWgslSourceMap(source: string, defines?: Map<string, string>): FinalLine[];
 }
 
 export { }

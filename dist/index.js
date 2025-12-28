@@ -15,6 +15,7 @@ var WgslToken;
     WgslToken[WgslToken["LessEqual"] = 13] = "LessEqual";
     WgslToken[WgslToken["Greater"] = 14] = "Greater";
     WgslToken[WgslToken["GreaterEqual"] = 15] = "GreaterEqual";
+    WgslToken[WgslToken["LineComment"] = 16] = "LineComment";
     //EOF,
 })(WgslToken || (WgslToken = {}));
 var Precedence;
@@ -427,7 +428,12 @@ function* getNextToken(source) {
                 yield WgslToken.Multiply;
                 break;
             case '/':
-                yield WgslToken.Divide;
+                if (charIterator.peek() == '/') {
+                    return;
+                }
+                else {
+                    yield WgslToken.Divide;
+                }
                 break;
             case '&':
                 if (charIterator.peek() == '&') {

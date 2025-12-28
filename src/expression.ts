@@ -14,6 +14,7 @@ export enum WgslToken {
 	LessEqual,
 	Greater,
 	GreaterEqual,
+	LineComment,
 	//EOF,
 }
 
@@ -502,7 +503,11 @@ function* getNextToken(source: string): Generator<WgslToken | string, void, unkn
 				yield WgslToken.Multiply;
 				break;
 			case '/':
-				yield WgslToken.Divide;
+				if (charIterator.peek() == '/') {
+					return;
+				} else {
+					yield WgslToken.Divide;
+				}
 				break;
 			case '&':
 				if (charIterator.peek() == '&') {

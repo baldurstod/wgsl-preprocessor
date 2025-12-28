@@ -234,6 +234,7 @@ export class WgslPreprocessor {
 		const processedArray = preprocess(expandedArray, defines);
 
 		const locations = new Map<string, number>();
+		const bindings = new Map<number, number>();
 		const locationRegEx = /@location\((\D\w*)\)/g;
 		const locationRegExSingle = /@location\((\D\w*)\)/;
 
@@ -246,7 +247,6 @@ export class WgslPreprocessor {
 				const result = locationRegEx.exec(currentLine);
 
 				if (!result || result.length < 2) {
-					finalArray.push(currentLine);
 					break;
 				}
 
@@ -254,14 +254,36 @@ export class WgslPreprocessor {
 				let currentLocation = locations.get(locationName);
 				if (currentLocation === undefined) {
 					currentLocation = 0;
-					locations.set(locationName, 0);
 				}
 
 				currentLine = currentLine.replace(locationRegExSingle, `@location(${currentLocation})`);
 				++currentLocation;
 				locations.set(locationName, currentLocation);
 			}
+
+
+			const bindingRegEx = /@binding\((\D\w*)\)/;
+			const groupResult = /@group\((\d*)\)/.exec(currentLine);
+			if (groupResult && groupResult.length > 1) {
+				const bindingResult = bindingRegEx.exec(currentLine);
+				if (bindingResult && bindingResult.length > 1) {
+					const groupId = Number(groupResult[1]);
+					let currentBinding = bindings.get(groupId);
+					if (currentBinding === undefined) {
+						currentBinding = 0;
+					}
+
+					currentLine = currentLine.replace(bindingRegEx, `@binding(${currentBinding})`);
+					++currentBinding;
+					bindings.set(groupId, currentBinding);
+				}
+			}
+
+			finalArray.push(currentLine);
 		}
+
+
+
 		return finalArray.join('\n');
 	}
 

@@ -1,8 +1,8 @@
 import { WgslPreprocessor } from '../dist/index.js'
 
 const s = `
-#ifdef TEST1
-	test1 is defined
+#ifdef TEST1 // comment
+	test1 is defined // comment
 	#ifdef TEST2
 		test2 is defined
 	#else

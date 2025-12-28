@@ -571,13 +571,15 @@ class Branch {
         return (this.parent?.isTrue() ?? true) && this.condition.isTrue();
     }
     addLine(line, defines) {
-        const preprocessorSymbols = /^\s*#([^\s]*)\s*(.*)/g;
+        const preprocessorSymbols = /^\s*#([\S]*)\s*(.*)/g;
         // If we are in a subbranch, pass the line to the subbranch
         if (this.#currentSubBranch) {
             if (this.#currentSubBranch.addLine(line, defines)) {
                 return true;
             }
         }
+        // Remove line comments
+        line.line = line.line.replace(/\/\/.*/, '').trimEnd();
         const matchedSymbol = preprocessorSymbols.exec(line.line);
         if (matchedSymbol) {
             switch (matchedSymbol[1]) {

@@ -5,6 +5,7 @@ evaluate('1 + (2 + 1)');
 evaluate('1 + 2 * 3 + 4');
 evaluate('defined(TEST)');
 evaluate('defined(IS_DEFINED)');
+evaluate('!defined(IS_DEFINED)');
 evaluate('true && false');
 evaluate('true || false');
 evaluate('true && false || true');

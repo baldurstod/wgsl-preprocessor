@@ -28,8 +28,9 @@ var Precedence;
     Precedence[Precedence["Relational"] = 5] = "Relational";
     Precedence[Precedence["Additive"] = 6] = "Additive";
     Precedence[Precedence["Multiplicative"] = 7] = "Multiplicative";
-    Precedence[Precedence["Function"] = 8] = "Function";
-    Precedence[Precedence["Literal"] = 9] = "Literal";
+    Precedence[Precedence["Prefix"] = 8] = "Prefix";
+    Precedence[Precedence["Function"] = 9] = "Function";
+    Precedence[Precedence["Literal"] = 10] = "Literal";
 })(Precedence || (Precedence = {}));
 function replaceDefine(line, defines) {
     for (let [oldValue, newValue] of defines) {
@@ -206,6 +207,15 @@ class GreaterEqualOperator extends ComparisonOperator {
         return Number(this.operators[0]) >= Number(this.operators[1]);
     }
 }
+class NotOperator {
+    isExpressionOperator = true;
+    operators = [,];
+    arguments = 1;
+    precedence = Precedence.Prefix;
+    eval(defines) {
+        return this.operators[0] ? false : true;
+    }
+}
 class LiteralOperator {
     isExpressionOperator = true;
     literalValue;
@@ -283,6 +293,9 @@ function parseExpression(expression, defines) {
                 currentExpression.pushOperator(new GreaterOperator());
                 break;
             case WgslToken.GreaterEqual:
+                currentExpression.pushOperator(new GreaterEqualOperator());
+                break;
+            case WgslToken.Not:
                 currentExpression.pushOperator(new GreaterEqualOperator());
                 break;
             /*

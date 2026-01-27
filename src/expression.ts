@@ -27,6 +27,7 @@ enum Precedence {
 	Relational,
 	Additive,
 	Multiplicative,
+	Prefix,
 	Function,
 	Literal,
 }
@@ -251,6 +252,18 @@ class GreaterEqualOperator extends ComparisonOperator {
 	}
 }
 
+class NotOperator implements ExpressionOperator {
+	isExpressionOperator = true as const;
+	operators: [ExpressionValue | undefined] = [,];
+	readonly arguments = 1;
+	readonly precedence = Precedence.Prefix;
+
+	eval(defines: Map<string, string>): ExpressionValue {
+		return this.operators[0] ? false : true;
+	}
+}
+
+
 class LiteralOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
 	literalValue: ExpressionValue;
@@ -336,6 +349,9 @@ function parseExpression(expression: string, defines: Map<string, string>): Expr
 				currentExpression.pushOperator(new GreaterOperator());
 				break;
 			case WgslToken.GreaterEqual:
+				currentExpression.pushOperator(new GreaterEqualOperator());
+				break;
+			case WgslToken.Not:
 				currentExpression.pushOperator(new GreaterEqualOperator());
 				break;
 			/*

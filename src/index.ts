@@ -352,7 +352,7 @@ function expandIncludes(source: string): FinalLine[] {
 				}
 				actualSize = include.length;
 			} else {
-				if (include === undefined) {
+				if (include === null) {
 					console.error(`Include not found : ${line}`)
 				}
 			}
@@ -382,7 +382,7 @@ function getInclude(includeName: string, recursion = new Set<string>(), allInclu
 		const line = includeLineArray[i]!;
 		if (line.trim().startsWith('#include')) {
 			const nestedIncludeName = line.replace('#include', '').trim();
-			const include = getInclude(nestedIncludeName, recursion, allIncludes);
+			const include = getInclude(nestedIncludeName, new Set(recursion), allIncludes);
 			if (include) {
 				for (const includeLine of include) {
 					outArray.push({ sourceName: includeName, line: includeLine.line, originLine: i, includeLine });

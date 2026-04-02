@@ -1,4 +1,4 @@
-import { evaluateExpression, replaceDefine } from './expression';
+import { DefineList, evaluateExpression, replaceDefine } from './expression';
 export { evaluateExpression };
 
 const includes = new Map<string, string>();
@@ -11,10 +11,10 @@ interface Condition {
 
 class ExpressionCondition implements Condition {
 	#expression: string;
-	#defines: Map<string, string>;
+	#defines: DefineList;
 	#result?: boolean;
 
-	constructor(expression: string, readonly defines: Map<string, string>) {
+	constructor(expression: string, readonly defines: DefineList) {
 		this.#expression = expression;
 		this.#defines = new Map(defines);
 	}
@@ -97,7 +97,7 @@ class Branch {
 		return (this.parent?.isTrue() ?? true) && this.condition.isTrue();
 	}
 
-	addLine(line: FinalLine, defines: Map<string, string>): boolean {
+	addLine(line: FinalLine, defines: DefineList): boolean {
 		const preprocessorSymbols = /^\s*#([\S]*)\s*(.*)/g
 		// If we are in a subbranch, pass the line to the subbranch
 		if (this.#currentSubBranch) {
@@ -115,9 +115,27 @@ class Branch {
 				// #define. defines are defined for the subsequent lines
 				case 'define':
 					if (this.isTrue()) {
-						const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
-						if (defineSymbols && defineSymbols.length > 3) {
-							defines.set(defineSymbols[2]!, defineSymbols[3]!);
+						const defineFunction = /#define\s*([^\s(]*)\(([^)]*)\)\s*(.*)/g.exec(line.line);
+						if (defineFunction && defineFunction.length === 4) {
+							// First try to get a function-like macro. No space allowed before the opening parenthesis
+
+							const args: string[] = defineFunction[2]!.split(',');
+							for (let i = 0; i < args.length; i++) {
+								args[i] = args[i]!.trim();
+							}
+
+							defines.set(defineFunction[1]!, {
+								args,
+								replacement: defineFunction[3]!,
+							});
+
+							console.info(defines);
+						} else {
+							// Try to get an object-like macro
+							const defineSymbols = /#define\s*([^\s]*)\s*(.*)/g.exec(line.line);
+							if (defineSymbols && defineSymbols.length > 2) {
+								defines.set(defineSymbols[1]!, defineSymbols[2]!);
+							}
 						}
 					}
 					return true;
@@ -228,7 +246,7 @@ export class WgslPreprocessor {
 		return includes.get(name);
 	}
 
-	static preprocessWgsl(source: string, defines: Map<string, string> = new Map<string, string>()): string {
+	static preprocessWgsl(source: string, defines: DefineList = new Map()): string {
 		const expandedArray = expandIncludes(source);
 
 		const processedArray = preprocess(expandedArray, defines);
@@ -287,7 +305,7 @@ export class WgslPreprocessor {
 		return finalArray.join('\n');
 	}
 
-	static getIncludeList(source: string, defines: Map<string, string> = new Map<string, string>()): Set<string> {
+	static getIncludeList(source: string, defines: DefineList = new Map()): Set<string> {
 		const expandedArray = expandIncludes(source);
 
 		const processedArray = preprocess(expandedArray, defines);
@@ -310,7 +328,7 @@ export class WgslPreprocessor {
 		return includes;
 	}
 
-	static preprocessWgslSourceMap(source: string, defines: Map<string, string> = new Map<string, string>()): FinalLine[] {
+	static preprocessWgslSourceMap(source: string, defines: DefineList = new Map()): FinalLine[] {
 		const expandedArray = expandIncludes(source);
 
 		const processedArray = preprocess(expandedArray, defines);
@@ -319,7 +337,7 @@ export class WgslPreprocessor {
 	}
 }
 
-function preprocess(lines: FinalLine[], defines: Map<string, string>): FinalLine[] {
+function preprocess(lines: FinalLine[], defines: DefineList): FinalLine[] {
 	const branch = new Branch(null, null, new TrueCondition());
 	const def = new Map(defines);
 	for (let i = 0, l = lines.length; i < l; ++i) {

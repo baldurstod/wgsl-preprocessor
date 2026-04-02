@@ -34,9 +34,54 @@ enum Precedence {
 
 type ExpressionValue = number | boolean | undefined | string;
 
-export function replaceDefine(line: string, defines: Map<string, string>): string {
+type FunctionMacro = {
+	args: string[];
+	replacement: string;
+};
+
+export type DefineList = Map<string, string | FunctionMacro>;
+
+function replaceSubString(origString: string, startIndex: number, length: number, replacement: string): string {
+	const firstPart = origString.substring(0, startIndex);
+	const lastPart = origString.substring(startIndex + length);
+
+	return firstPart + replacement + lastPart;
+}
+
+export function replaceDefine(line: string, defines: DefineList): string {
+	if (line === '') {
+		return line;
+	}
 	for (let [oldValue, newValue] of defines) {
-		line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+		if (typeof newValue === 'string' || newValue === undefined) {
+			line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+		} else {
+			const regex = new RegExp(`${oldValue}\\(([^\\)]*)\\)`, 'g');
+
+			//const sub = line.search(`${oldValue}\\(([^\\)]*)\\)`);
+			while (true) {
+				const result = regex.exec(line);
+
+				if (!result) {
+					break;
+				}
+
+				if (result.length < 2) {
+					continue;
+				}
+
+				const args = result[1]!.split(',')
+				if (args.length === newValue.args.length) {
+
+					let newString = result[0];
+					for (let i = 0; i < args.length; i++) {
+						newString = newString.replace(newValue.args[i]!, args[i]!);
+					}
+
+					line = replaceSubString(line, result.index, result[0].length, newString);
+				}
+			}
+		}
 	}
 	return line;
 }
@@ -59,7 +104,7 @@ class Expression {
 	}
 	*/
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		//console.info('eval', this.operators);
 
 		const operators = this.operators;
@@ -147,7 +192,7 @@ interface ExpressionOperator {
 	readonly precedence: Precedence;
 
 	operators: (ExpressionValue | undefined)[];
-	eval: (defines: Map<string, string>) => ExpressionValue;
+	eval: (defines: DefineList) => ExpressionValue;
 }
 
 class GroupOperator implements ExpressionOperator {
@@ -157,7 +202,7 @@ class GroupOperator implements ExpressionOperator {
 	readonly arguments = 0;
 	readonly precedence = Precedence.Literal;
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		return this.expression.eval(defines);
 	}
 }
@@ -168,7 +213,7 @@ class AddOperator implements ExpressionOperator {
 	readonly arguments = 2;
 	readonly precedence = Precedence.Additive;
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		return Number(this.operators[0] ?? 0) + Number(this.operators[1] ?? 0);
 	}
 }
@@ -180,7 +225,7 @@ class MultiplyOperator implements ExpressionOperator {
 	readonly precedence = Precedence.Multiplicative;
 
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		return Number(this.operators[0] ?? 0) * Number(this.operators[1] ?? 0);
 	}
 }
@@ -191,7 +236,7 @@ class ComparisonOperator implements ExpressionOperator {
 	readonly arguments = 2;
 	precedence = Precedence.Relational;
 
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return this.operators[0] == this.operators[1];
 	}
 }
@@ -199,7 +244,7 @@ class ComparisonOperator implements ExpressionOperator {
 class AndOperator extends ComparisonOperator {
 	readonly precedence = Precedence.LogicalAnd;
 
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return (this.operators[0] as boolean) && (this.operators[1] as boolean);
 	}
 }
@@ -207,7 +252,7 @@ class AndOperator extends ComparisonOperator {
 class OrOperator extends ComparisonOperator {
 	readonly precedence = Precedence.LogicalOr;
 
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return (this.operators[0] as boolean) || (this.operators[1] as boolean);
 	}
 }
@@ -215,7 +260,7 @@ class OrOperator extends ComparisonOperator {
 class EqualOperator extends ComparisonOperator {
 	readonly precedence = Precedence.Equality;
 
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return this.operators[0] == this.operators[1];
 	}
 }
@@ -223,31 +268,31 @@ class EqualOperator extends ComparisonOperator {
 class NotEqualOperator extends ComparisonOperator {
 	readonly precedence = Precedence.Equality;
 
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return this.operators[0] != this.operators[1];
 	}
 }
 
 class LessOperator extends ComparisonOperator {
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return Number(this.operators[0]) < Number(this.operators[1]);
 	}
 }
 
 class LessEqualOperator extends ComparisonOperator {
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return Number(this.operators[0]) <= Number(this.operators[1]);
 	}
 }
 
 class GreaterOperator extends ComparisonOperator {
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return Number(this.operators[0]) > Number(this.operators[1]);
 	}
 }
 
 class GreaterEqualOperator extends ComparisonOperator {
-	eval(defines: Map<string, string>): boolean {
+	eval(defines: DefineList): boolean {
 		return Number(this.operators[0]) >= Number(this.operators[1]);
 	}
 }
@@ -258,7 +303,7 @@ class NotOperator implements ExpressionOperator {
 	readonly arguments = 1;
 	readonly precedence = Precedence.Prefix;
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		return this.operators[0] ? false : true;
 	}
 }
@@ -282,7 +327,7 @@ class LiteralOperator implements ExpressionOperator {
 
 class FunctionOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;
-	//defines: Map<string, string>;
+	//defines: DefineList;
 	//literalValue: ExpressionValue;
 	operators = [];
 	readonly arguments = 0;
@@ -294,7 +339,7 @@ class FunctionOperator implements ExpressionOperator {
 		this.name = name;
 	}
 
-	eval(defines: Map<string, string>): ExpressionValue {
+	eval(defines: DefineList): ExpressionValue {
 		let expressionResult = this.expression.eval(defines);
 		switch (this.name) {
 			case 'defined':
@@ -309,7 +354,7 @@ class FunctionOperator implements ExpressionOperator {
 	}
 }
 
-function parseExpression(expression: string, defines: Map<string, string>): Expression | undefined {
+function parseExpression(expression: string, defines: DefineList): Expression | undefined {
 	const tokenIterator = getNextToken(expression);
 
 	//const operatorStack: ExpressionOperator[] = [];
@@ -415,7 +460,7 @@ function parseExpression(expression: string, defines: Map<string, string>): Expr
 	return expressionStack[0];
 }
 
-export function evaluateExpression(expression: string, defines: Map<string, string>): ExpressionValue {
+export function evaluateExpression(expression: string, defines: DefineList): ExpressionValue {
 	const operator = parseExpression(expression, defines);
 	//console.log(operator);
 	return operator?.eval(defines);

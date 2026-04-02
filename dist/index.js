@@ -32,9 +32,40 @@ var Precedence;
     Precedence[Precedence["Function"] = 9] = "Function";
     Precedence[Precedence["Literal"] = 10] = "Literal";
 })(Precedence || (Precedence = {}));
+function replaceSubString(origString, startIndex, length, replacement) {
+    const firstPart = origString.substring(0, startIndex);
+    const lastPart = origString.substring(startIndex + length);
+    return firstPart + replacement + lastPart;
+}
 function replaceDefine(line, defines) {
+    if (line === '') {
+        return line;
+    }
     for (let [oldValue, newValue] of defines) {
-        line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+        if (typeof newValue === 'string' || newValue === undefined) {
+            line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
+        }
+        else {
+            const regex = new RegExp(`${oldValue}\\(([^\\)]*)\\)`, 'g');
+            //const sub = line.search(`${oldValue}\\(([^\\)]*)\\)`);
+            while (true) {
+                const result = regex.exec(line);
+                if (!result) {
+                    break;
+                }
+                if (result.length < 2) {
+                    continue;
+                }
+                const args = result[1].split(',');
+                if (args.length === newValue.args.length) {
+                    let newString = result[0];
+                    for (let i = 0; i < args.length; i++) {
+                        newString = newString.replace(newValue.args[i], args[i]);
+                    }
+                    line = replaceSubString(line, result.index, result[0].length, newString);
+                }
+            }
+        }
     }
     return line;
 }
@@ -207,31 +238,9 @@ class GreaterEqualOperator extends ComparisonOperator {
         return Number(this.operators[0]) >= Number(this.operators[1]);
     }
 }
-class NotOperator {
-    isExpressionOperator = true;
-    operators = [,];
-    arguments = 1;
-    precedence = Precedence.Prefix;
-    eval(defines) {
-        return this.operators[0] ? false : true;
-    }
-}
-class LiteralOperator {
-    isExpressionOperator = true;
-    literalValue;
-    operators = [];
-    arguments = 1;
-    precedence = Precedence.Literal;
-    constructor(value) {
-        this.literalValue = value;
-    }
-    eval() {
-        return this.literalValue;
-    }
-}
 class FunctionOperator {
     isExpressionOperator = true;
-    //defines: Map<string, string>;
+    //defines: DefineList;
     //literalValue: ExpressionValue;
     operators = [];
     arguments = 0;
@@ -599,9 +608,25 @@ class Branch {
                 // #define. defines are defined for the subsequent lines
                 case 'define':
                     if (this.isTrue()) {
-                        const defineSymbols = /#([^\s]*)\s*([^\s]*)\s*(.*)/g.exec(line.line);
-                        if (defineSymbols && defineSymbols.length > 3) {
-                            defines.set(defineSymbols[2], defineSymbols[3]);
+                        const defineFunction = /#define\s*([^\s(]*)\(([^)]*)\)\s*(.*)/g.exec(line.line);
+                        if (defineFunction && defineFunction.length === 4) {
+                            // First try to get a function-like macro. No space allowed before the opening parenthesis
+                            const args = defineFunction[2].split(',');
+                            for (let i = 0; i < args.length; i++) {
+                                args[i] = args[i].trim();
+                            }
+                            defines.set(defineFunction[1], {
+                                args,
+                                replacement: defineFunction[3],
+                            });
+                            console.info(defines);
+                        }
+                        else {
+                            // Try to get an object-like macro
+                            const defineSymbols = /#define\s*([^\s]*)\s*(.*)/g.exec(line.line);
+                            if (defineSymbols && defineSymbols.length > 2) {
+                                defines.set(defineSymbols[1], defineSymbols[2]);
+                            }
                         }
                     }
                     return true;

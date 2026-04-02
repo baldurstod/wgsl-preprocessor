@@ -42,7 +42,7 @@ function replaceDefine(line, defines) {
         return line;
     }
     for (let [oldValue, newValue] of defines) {
-        if (typeof newValue === 'string' || newValue === undefined) {
+        if (typeof newValue !== 'object') {
             line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
         }
         else {
@@ -58,7 +58,7 @@ function replaceDefine(line, defines) {
                 }
                 const args = result[1].split(',');
                 if (args.length === newValue.args.length) {
-                    let newString = result[0];
+                    let newString = newValue.replacement;
                     for (let i = 0; i < args.length; i++) {
                         newString = newString.replace(newValue.args[i], args[i]);
                     }
@@ -236,6 +236,28 @@ class GreaterOperator extends ComparisonOperator {
 class GreaterEqualOperator extends ComparisonOperator {
     eval(defines) {
         return Number(this.operators[0]) >= Number(this.operators[1]);
+    }
+}
+class NotOperator {
+    isExpressionOperator = true;
+    operators = [,];
+    arguments = 1;
+    precedence = Precedence.Prefix;
+    eval(defines) {
+        return this.operators[0] ? false : true;
+    }
+}
+class LiteralOperator {
+    isExpressionOperator = true;
+    literalValue;
+    operators = [];
+    arguments = 1;
+    precedence = Precedence.Literal;
+    constructor(value) {
+        this.literalValue = value;
+    }
+    eval() {
+        return this.literalValue;
     }
 }
 class FunctionOperator {
@@ -619,7 +641,6 @@ class Branch {
                                 args,
                                 replacement: defineFunction[3],
                             });
-                            console.info(defines);
                         }
                         else {
                             // Try to get an object-like macro

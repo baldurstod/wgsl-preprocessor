@@ -53,7 +53,7 @@ export function replaceDefine(line: string, defines: DefineList): string {
 		return line;
 	}
 	for (let [oldValue, newValue] of defines) {
-		if (typeof newValue === 'string' || newValue === undefined) {
+		if (typeof newValue !== 'object') {
 			line = line.replace(new RegExp('\\b' + oldValue + '\\b', 'g'), newValue);
 		} else {
 			const regex = new RegExp(`${oldValue}\\(([^\\)]*)\\)`, 'g');
@@ -73,7 +73,7 @@ export function replaceDefine(line: string, defines: DefineList): string {
 				const args = result[1]!.split(',')
 				if (args.length === newValue.args.length) {
 
-					let newString = result[0];
+					let newString = newValue.replacement;
 					for (let i = 0; i < args.length; i++) {
 						newString = newString.replace(newValue.args[i]!, args[i]!);
 					}
@@ -307,7 +307,6 @@ class NotOperator implements ExpressionOperator {
 		return this.operators[0] ? false : true;
 	}
 }
-
 
 class LiteralOperator implements ExpressionOperator {
 	isExpressionOperator = true as const;

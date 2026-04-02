@@ -128,8 +128,6 @@ class Branch {
 								args,
 								replacement: defineFunction[3]!,
 							});
-
-							console.info(defines);
 						} else {
 							// Try to get an object-like macro
 							const defineSymbols = /#define\s*([^\s]*)\s*(.*)/g.exec(line.line);

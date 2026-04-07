@@ -1,4 +1,4 @@
-import { errorStack } from 'harmony-utils';
+import { errorSet } from 'harmony-utils';
 
 var WgslToken;
 (function (WgslToken) {
@@ -850,7 +850,7 @@ function expandIncludes(source) {
             }
             else {
                 if (include === null) {
-                    errorStack('Wgsl include not found', line);
+                    errorSet('Wgsl include not found', line.trim());
                 }
             }
         }

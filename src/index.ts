@@ -1,4 +1,4 @@
-import { errorStack } from 'harmony-utils';
+import { errorSet } from 'harmony-utils';
 import { DefineList, evaluateExpression, replaceDefine } from './expression';
 export { evaluateExpression };
 
@@ -369,7 +369,7 @@ function expandIncludes(source: string): FinalLine[] {
 				actualSize = include.length;
 			} else {
 				if (include === null) {
-					errorStack('Wgsl include not found', line);
+					errorSet('Wgsl include not found', line.trim());
 				}
 			}
 		} else {

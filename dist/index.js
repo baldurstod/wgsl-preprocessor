@@ -1,3 +1,5 @@
+import { errorStack } from 'harmony-utils';
+
 var WgslToken;
 (function (WgslToken) {
     WgslToken[WgslToken["OpenParenthesis"] = 1] = "OpenParenthesis";
@@ -848,7 +850,7 @@ function expandIncludes(source) {
             }
             else {
                 if (include === null) {
-                    console.error(`Include not found : ${line}`);
+                    errorStack('Wgsl include not found', line);
                 }
             }
         }
